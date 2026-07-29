@@ -4,7 +4,7 @@ import { showToast } from '@/composables/useToast.js'
 import { logout } from '@/composables/useAuth.js'
 
 const http = axios.create({
-  baseURL: 'http://localhost:3001/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1',
   timeout: 10000,
 })
 
