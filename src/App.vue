@@ -9,6 +9,11 @@ import AppIcon      from '@/components/AppIcon.vue'
 import { useI18n } from '@/i18n/index.js'
 import { isLoggedIn, logout, refreshMe } from '@/composables/useAuth.js'
 import { toast } from '@/composables/useToast.js'
+import { ref } from 'vue'
+import {
+  pushSupported, pushPermission, pushSubscribed,
+  checkPushStatus, enablePush,
+} from '@/composables/usePushNotifications.js'
 
 const { t } = useI18n()
 const route  = useRoute()
@@ -16,6 +21,24 @@ const router = useRouter()
 
 // Ruxsatlar o'zgargan bo'lsa qayta login talab qilinmasin
 onMounted(refreshMe)
+
+// ── Push-bildirishnoma taklifi (login qilingandan keyin, bir marta so'raladi) ──
+const PROMPT_DISMISSED_KEY = 'push_prompt_dismissed'
+const showPushPrompt = ref(false)
+onMounted(async () => {
+  if (!isLoggedIn.value) return
+  await checkPushStatus()
+  const dismissed = localStorage.getItem(PROMPT_DISMISSED_KEY) === 'true'
+  showPushPrompt.value = pushSupported.value && pushPermission.value === 'default' && !pushSubscribed.value && !dismissed
+})
+async function acceptPush() {
+  const ok = await enablePush()
+  if (ok) showPushPrompt.value = false
+}
+function dismissPush() {
+  showPushPrompt.value = false
+  localStorage.setItem(PROMPT_DISMISSED_KEY, 'true')
+}
 
 const isFullscreen = computed(() => !!route.meta?.fullscreen)
 
@@ -52,9 +75,9 @@ function handleLogout() {
       </main>
     </div>
 
-    <!-- Always rendered (CSS-gated to ≤768px); fullscreen pages (e.g. Sales) account for
-         its height themselves so it can coexist with their own mobile bottom bars. -->
-    <BottomNav class="app__bottom-nav" />
+    <!-- Fullscreen sahifalar (masalan Sotuv) o'zining mobil pastki menyusiga ega,
+         shuning uchun umumiy BottomNav u yerda butunlay yashiriladi. -->
+    <BottomNav v-if="!isFullscreen" class="app__bottom-nav" />
 
     <!-- Global tezkor qidiruv (Ctrl/Cmd+K) -->
     <GlobalSearch />
@@ -65,6 +88,21 @@ function handleLogout() {
     <div v-if="toast" class="g-toast" :class="`g-toast--${toast.type}`">
       <AppIcon :name="toast.type === 'ok' ? 'check-circle' : toast.type === 'hold' ? 'pause-circle' : 'alert-circle'" :size="18"/>
       {{ toast.message }}
+    </div>
+  </transition>
+
+  <!-- Push-bildirishnoma taklifi -->
+  <transition name="toast">
+    <div v-if="showPushPrompt" class="push-prompt">
+      <div class="push-prompt__ico"><AppIcon name="bell" :size="18"/></div>
+      <div class="push-prompt__body">
+        <p class="push-prompt__title">Kunlik xush kelibsiz xabarini olasizmi?</p>
+        <p class="push-prompt__sub">Har kuni ertalab Sellz'dan iliq xabar keladi</p>
+      </div>
+      <button class="push-prompt__btn push-prompt__btn--ok" @click="acceptPush">Yoqish</button>
+      <button class="push-prompt__btn push-prompt__btn--x" @click="dismissPush">
+        <AppIcon name="x" :size="14"/>
+      </button>
     </div>
   </transition>
 </template>
@@ -138,4 +176,45 @@ function handleLogout() {
 
 .toast-enter-active, .toast-leave-active { transition: all .25s; }
 .toast-enter-from,   .toast-leave-to      { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+
+/* ── Push-bildirishnoma taklifi ────────────────────── */
+.push-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  width: calc(100% - 32px);
+  padding: 14px 14px 14px 16px;
+  border-radius: 16px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  box-shadow: 0 12px 32px rgba(15,23,42,0.18);
+}
+.push-prompt__ico {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(99,102,241,0.12); color: #6366f1;
+}
+.push-prompt__body { flex: 1; min-width: 0; }
+.push-prompt__title { font-size: 13px; font-weight: 700; color: var(--color-text, #1e293b); }
+.push-prompt__sub { font-size: 11.5px; color: var(--color-text-3, #94a3b8); margin-top: 1px; }
+.push-prompt__btn {
+  flex-shrink: 0; border-radius: 10px; font-family: inherit; cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.push-prompt__btn--ok {
+  height: 34px; padding: 0 14px; font-size: 12.5px; font-weight: 700;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;
+}
+.push-prompt__btn--ok:hover { opacity: 0.9; }
+.push-prompt__btn--x {
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-3, #94a3b8);
+}
+.push-prompt__btn--x:hover { background: var(--slate-100, #f1f5f9); }
 </style>

@@ -126,7 +126,8 @@ const activeSection = ref('store')
           <!-- Preview -->
           <div class="receipt-preview">
             <div class="rp__header">{{ form.storeName || 'Dokon nomi' }}</div>
-            <div class="rp__sub">{{ form.storeAddress || 'Manzil' }}</div>
+            <div v-if="form.storeAddress" class="rp__sub">{{ form.storeAddress }}</div>
+            <div v-if="form.storePhone" class="rp__sub">{{ form.storePhone }}</div>
             <div class="rp__divider">- - - - - - - - - - - - - - -</div>
             <div class="rp__row"><span>Mahsulot 1</span><span>25 000</span></div>
             <div class="rp__row"><span>Mahsulot 2</span><span>15 000</span></div>

@@ -5,7 +5,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import { useI18n } from '@/i18n/index.js'
 import { productsApi } from '@/api/products.js'
 import { useAuth } from '@/composables/useAuth.js'
-import { canView } from '@/composables/usePerms.js'
+import { canView, isDasturchi } from '@/composables/usePerms.js'
 
 const emit = defineEmits(['logout'])
 const { t } = useI18n()
@@ -116,6 +116,20 @@ const navGroups = [
 
     <!-- ── Footer ─────────────────────────────────────────── -->
     <div class="sb__footer">
+      <!-- Dasturchi paneli (faqat 'Dasturchi' hisobi ko'radi, Admin ham kirmaydi) -->
+      <button
+        v-if="isDasturchi"
+        class="sb__item sb__item--settings"
+        :class="{ 'is-active': isActive('dev') }"
+        :style="isActive('dev') ? { '--item-color': '#f472b6', '--item-bg': 'rgba(244,114,182,0.15)' } : {}"
+        @click="go('dev')"
+      >
+        <span class="sb__item-ico" :class="{ 'is-active': isActive('dev') }">
+          <AppIcon name="zap" :size="16" :stroke-width="1.75" />
+        </span>
+        <span class="sb__item-lbl">Dasturchi</span>
+      </button>
+
       <!-- Settings (faqat ruxsat bo'lsa) -->
       <button
         v-if="canView('settings')"

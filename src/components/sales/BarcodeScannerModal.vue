@@ -14,24 +14,47 @@ let controls    = null
 let lastCode    = ''
 let lastAt      = 0
 
-async function start() {
-  try {
-    reader = new BrowserMultiFormatReader()
-    const devices = await BrowserMultiFormatReader.listVideoInputDevices()
-    if (!devices.length) { error.value = 'Kamera topilmadi'; starting.value = false; return }
-    // Orqa kamerani afzal ko'ramiz (mobil qurilmalarda shtrix-kod skanerlash uchun qulayroq)
-    const back = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1]
+function onResult(result) {
+  if (!result) return
+  const code = result.getText()
+  const now  = Date.now()
+  // Bir xil kodni ketma-ket bir necha marta o'qishning oldini olamiz (video kadr tezligi tufayli)
+  if (code === lastCode && now - lastAt < 1500) return
+  lastCode = code; lastAt = now
+  beep('add')
+  emit('detected', code)
+}
 
-    controls = await reader.decodeFromVideoDevice(back.deviceId, videoEl.value, (result) => {
-      if (!result) return
-      const code = result.getText()
-      const now  = Date.now()
-      // Bir xil kodni ketma-ket bir necha marta o'qishning oldini olamiz (video kadr tezligi tufayli)
-      if (code === lastCode && now - lastAt < 1500) return
-      lastCode = code; lastAt = now
-      beep('add')
-      emit('detected', code)
-    })
+async function start() {
+  reader = new BrowserMultiFormatReader()
+
+  // 1-urinish: facingMode orqali to'g'ridan-to'g'ri orqa kamerani so'raymiz.
+  // enumerateDevices()ga tayanmaydi — iOS Safari/PWA'da "method not supported"
+  // xatosiga olib keladigan yo'l shu edi, chunki kamera ruxsati hali berilmagan
+  // paytda qurilmalar ro'yxati (va ba'zan hatto usulning o'zi) mavjud bo'lmaydi.
+  try {
+    controls = await reader.decodeFromConstraints(
+      { video: { facingMode: { ideal: 'environment' } } },
+      videoEl.value,
+      onResult,
+    )
+    starting.value = false
+    return
+  } catch (e) {
+    if (e?.name === 'NotAllowedError') {
+      error.value = 'Kameraga ruxsat berilmadi'
+      starting.value = false
+      return
+    }
+    // facingMode qo'llab-quvvatlanmasa (ba'zi eski qurilmalar), oddiy video bilan qayta urinamiz
+  }
+
+  try {
+    controls = await reader.decodeFromConstraints(
+      { video: true },
+      videoEl.value,
+      onResult,
+    )
     starting.value = false
   } catch (e) {
     error.value = e?.name === 'NotAllowedError'

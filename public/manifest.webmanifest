@@ -1,0 +1,13 @@
+{
+  "name": "Sellz POS",
+  "short_name": "Sellz",
+  "description": "Sellz — savdo boshqaruv tizimi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0a2e",
+  "theme_color": "#7c42eb",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

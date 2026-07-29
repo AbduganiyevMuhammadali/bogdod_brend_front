@@ -10,6 +10,7 @@ import { clientsApi }   from '@/api/clients.js'
 import { purchasesApi } from '@/api/purchases.js'
 import { beep }         from '@/composables/useBeep.js'
 import { canAdd }       from '@/composables/usePerms.js'
+import { loadStoreSettings } from '@/composables/useStoreSettings.js'
 
 const route  = useRoute()
 const router = useRouter()
@@ -508,6 +509,7 @@ function printSaleReceipt(s){
   const dt=new Date(s.date)
   const dateStr=dt.toLocaleDateString('uz-UZ',{day:'2-digit',month:'2-digit',year:'numeric'})
   const timeStr=dt.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'})
+  const store=loadStoreSettings()
   const win=window.open('','_blank','width=420,height=800,scrollbars=yes')
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Chek #${s.docNumber}</title><style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -534,7 +536,10 @@ function printSaleReceipt(s){
   </style></head><body><div class="receipt">
     <div class="perf"></div>
     <div class="body">
-      <div class="store">SAVDO CHEKI</div>
+      <div class="store">${store.name}</div>
+      ${store.address?`<div class="sub">${store.address}</div>`:''}
+      ${store.phone?`<div class="sub">${store.phone}</div>`:''}
+      ${store.header?`<div class="sub">${store.header}</div>`:''}
       <div class="sub">${dateStr} · ${timeStr}</div>
       <div class="meta"><span>Chek #${String(s.docNumber).padStart(5,'0')}</span><span>${s.cashierName||'Kassir'}</span></div>
       ${s.warehouse?`<div class="meta"><span>Filial</span><span>${s.warehouse}</span></div>`:''}
@@ -551,8 +556,7 @@ function printSaleReceipt(s){
     </div>
     <div class="perf-b"></div>
     <div class="footer">
-      <div class="footer-main">RAHMAT!</div>
-      <div class="footer-sub">Yana tashrif buyuring</div>
+      <div class="footer-main">${store.footer}</div>
     </div>
   </div></body></html>`)
   win.document.close(); win.focus()
@@ -717,6 +721,15 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
             @click="showOutOfStock = !showOutOfStock"
           >
             <AppIcon name="eye" :size="13"/>
+          </button>
+          <button
+            class="cat__price-type-btn"
+            :class="priceType==='ulgurji' ? 'cat__price-type-btn--ulg' : 'cat__price-type-btn--cha'"
+            @click="priceType=priceType==='chakana'?'ulgurji':'chakana'"
+            :title="priceType==='chakana' ? 'Chakana narx — bosing ulgurjiga o\'tish uchun' : 'Ulgurji narx — bosing chakanaga qaytish uchun'"
+          >
+            <AppIcon name="tag" :size="13"/>
+            <span>{{ priceType==='chakana' ? 'Chak.' : 'Ulg.' }}</span>
           </button>
         </div>
       </div>
@@ -1838,6 +1851,31 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
     @detected="onCameraDetected"
   />
 
+  <!-- Mobil: Sotuv oynasining o'z pastki menyusi (POS/Tarix/Kassa/Mijoz) —
+       umumiy ilova BottomNav'i o'rniga shu ko'rinadi, chunki Sotuv fullscreen sahifa. -->
+  <nav class="sp-mobile-tabbar">
+    <button :class="['smt__item', mode==='pos'&&'is-active']" @click="mode='pos'">
+      <span class="smt__ico-wrap"><AppIcon name="shopping-cart" :size="19" :stroke-width="mode==='pos'?2.3:1.9"/></span>
+      <span class="smt__lbl">Savat</span>
+    </button>
+    <button :class="['smt__item', mode==='history'&&'is-active']" @click="mode='history'">
+      <span class="smt__ico-wrap"><AppIcon name="list" :size="19" :stroke-width="mode==='history'?2.3:1.9"/></span>
+      <span class="smt__lbl">Tarix</span>
+    </button>
+    <button :class="['smt__item', mode==='cash'&&'is-active']" @click="mode='cash'">
+      <span class="smt__ico-wrap"><AppIcon name="bar-chart-2" :size="19" :stroke-width="mode==='cash'?2.3:1.9"/></span>
+      <span class="smt__lbl">Kassa</span>
+    </button>
+    <button :class="['smt__item', mode==='clients'&&'is-active']" @click="mode='clients'">
+      <span class="smt__ico-wrap"><AppIcon name="users" :size="19" :stroke-width="mode==='clients'?2.3:1.9"/></span>
+      <span class="smt__lbl">Mijoz</span>
+    </button>
+    <button class="smt__item" @click="router.push('/dashboard')">
+      <span class="smt__ico-wrap"><AppIcon name="x" :size="19" :stroke-width="2"/></span>
+      <span class="smt__lbl">Chiqish</span>
+    </button>
+  </nav>
+
 </div>
 </div>
 </template>
@@ -1845,6 +1883,9 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 <style scoped>
 .sales-root{display:contents}
 .sp{display:flex;height:100vh;overflow:hidden;background:#f4f6fb}
+
+/* Mobil pastki menyu (POS/Tarix/Kassa/Mijoz) — desktopda yashirin */
+.sp-mobile-tabbar{ display: none; }
 
 /* Icon sidebar */
 .sp-ico{width:54px;flex-shrink:0;background:linear-gradient(175deg,#1e1b4b 0%,#1a1740 60%,#16143a 100%);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;border-right:1px solid rgba(99,102,241,.15)}
@@ -1895,6 +1936,11 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 .cat__oos-btn{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1.5px solid #e2e8f0;color:#94a3b8;cursor:pointer;flex-shrink:0;transition:all .15s}
 .cat__oos-btn:hover{border-color:#818cf8;color:#6366f1;background:#eef2ff}
 .cat__oos-btn.on{background:#fef3c7;border-color:#fde68a;color:#d97706}
+.cat__price-type-btn{height:32px;padding:0 10px;border-radius:8px;display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;letter-spacing:.02em;cursor:pointer;font-family:inherit;transition:all .15s;border:1.5px solid transparent;flex-shrink:0}
+.cat__price-type-btn--cha{background:#eef2ff;color:#6366f1;border-color:#c7d2fe}
+.cat__price-type-btn--cha:hover{background:#e0e7ff}
+.cat__price-type-btn--ulg{background:#fef3c7;color:#d97706;border-color:#fde68a}
+.cat__price-type-btn--ulg:hover{background:#fde68a}
 .cat__tabs{display:flex;gap:4px;padding:8px 14px;background:white;border-bottom:1px solid #e2e8f0;flex-shrink:0;overflow-x:auto;scrollbar-width:none}
 .cat__tabs::-webkit-scrollbar{display:none}
 .cat__tab{padding:5px 14px;border-radius:99px;border:1.5px solid #e2e8f0;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;color:#64748b;white-space:nowrap;transition:all .15s}
@@ -2118,27 +2164,13 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 @media (max-width: 768px) {
 
   /* Bottom-nav height reserved by App.vue's BottomNav component */
-  :root { --bn-h: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  :root { --bn-h: calc(64px + env(safe-area-inset-bottom, 0px)); }
 
   .sp { height: 100vh; flex-direction: column; }
 
-  /* Vertical icon rail → slim horizontal strip pinned to the top */
-  .sp-ico{
-    width: auto; flex-shrink: 0;
-    flex-direction: row; align-items: center;
-    padding: 6px 8px;
-    gap: 6px;
-    border-right: none;
-    border-bottom: 1px solid rgba(99,102,241,.15);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .sp-ico::-webkit-scrollbar{ display: none; }
-  .sp-ico__logo{ width: 30px; height: 30px; margin-bottom: 0; flex-shrink: 0; }
-  .sp-ico__nav{ flex-direction: row; flex: 0 0 auto; gap: 4px; }
-  .sp-ico__bot{ padding-top: 0; border-top: none; flex-direction: row; margin-left: auto; flex-shrink: 0; }
-  .ico-btn{ width: 34px; height: 34px; }
-  .price-type-btn{ width: auto; flex-direction: row; padding: 7px 10px; }
+  /* Ikonka-panel mobil holatda butunlay yashiriladi — o'rniga pastdagi
+     .sp-mobile-tabbar ko'rinadi (POS/Tarix/Kassa/Mijoz rejimlari). */
+  .sp-ico{ display: none; }
 
   /* POS becomes a single full-bleed column; cart panel is hidden, replaced by bar+sheet */
   .pos { flex-direction: column; }
@@ -2333,6 +2365,55 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 
   /* No horizontal overflow anywhere at narrow widths */
   .sales-root, .sp, .pos, .pos__catalog { max-width: 100vw; overflow-x: hidden; }
+
+  /* ── Sotuv oynasining mobil pastki menyusi ──────────────────────
+     Umumiy ilova BottomNav'i o'rnini bosadi (Sales fullscreen sahifa,
+     App.vue'dagi BottomNav shu yerda ko'rinmaydi). Animatsiyali fon +
+     katta, bosish qulay bandlar. ── */
+  .sp-mobile-tabbar{
+    display: flex;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    align-items: stretch;
+    overflow: hidden;
+    background:
+      linear-gradient(rgba(255,255,255,0.92), rgba(255,255,255,0.92)),
+      linear-gradient(120deg, #eef2ff, #fdf2f8, #ecfeff, #eef2ff);
+    background-size: 100% 100%, 300% 300%;
+    animation: smt-bg-flow 14s ease-in-out infinite;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid rgba(15,23,42,0.08);
+    box-shadow: 0 -8px 24px rgba(15,23,42,0.06);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+  @keyframes smt-bg-flow {
+    0%, 100% { background-position: 0 0, 0% 50%; }
+    50%      { background-position: 0 0, 100% 50%; }
+  }
+  .smt__item{
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    color: #94a3b8;
+    font-family: inherit;
+    transition: color 0.2s ease, transform 0.15s ease;
+  }
+  .smt__item:active{ transform: scale(0.92); }
+  .smt__ico-wrap{
+    display: flex; align-items: center; justify-content: center;
+    width: 38px; height: 26px; border-radius: 14px;
+    transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .smt__lbl{ font-size: 10.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .smt__item.is-active{ color: #4f46e5; }
+  .smt__item.is-active .smt__ico-wrap{
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    box-shadow: 0 4px 14px rgba(99,102,241,0.45);
+  }
+  .smt__item.is-active .smt__lbl{ font-weight: 800; }
+
 }
 
 @media (max-width: 420px) {

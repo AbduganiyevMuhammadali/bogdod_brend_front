@@ -19,6 +19,8 @@ const LEGACY = {
 }
 
 export const isAdmin = computed(() => me.value?.role === 'admin')
+// Faqat asl backend roli 'Dasturchi' bo'lgan hisob — Admin bu yerga kirmaydi.
+export const isDasturchi = computed(() => me.value?.rawRole === 'Dasturchi')
 
 function permOf(module) {
   const p = me.value?.perms
@@ -38,5 +40,5 @@ export function canAdd(module)  { return has(module, 'qoshish') }
 export function canEdit(module) { return has(module, 'tahrir') }
 
 export function usePerms() {
-  return { isAdmin, canView, canAdd, canEdit }
+  return { isAdmin, isDasturchi, canView, canAdd, canEdit }
 }

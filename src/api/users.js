@@ -11,6 +11,7 @@ function toFrontend(u) {
     email:       u.email    ?? '',
     warehouse:   u.warehouse ?? '',
     role:        ['Admin', 'Programmer', 'Dasturchi'].includes(u.role) ? 'admin' : 'operator',
+    rawRole:     u.role ?? '', // asl backend roli (masalan 'Dasturchi') — faqat Dasturchiga xos sahifalar uchun
     active:      u.active !== false,
     perms:       u.permissions ?? null,
   }

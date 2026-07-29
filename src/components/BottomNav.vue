@@ -8,26 +8,20 @@ import { canView } from '@/composables/usePerms.js'
 const route  = useRoute()
 const router = useRouter()
 
+// Asosiy panelda DOIM shu 4 tasi (ruxsat bo'lsa) — qolgan hammasi "Ko'proq" ostida.
 const allItems = [
-  { key: 'dashboard',   label: 'Bosh sahifa', icon: 'home' },
-  { key: 'sales',       label: 'Sotuv',        icon: 'shopping-cart' },
-  { key: 'suppliers',   label: 'Yetkazuvchi',  icon: 'truck' },
-  { key: 'partners',    label: 'Mijoz',        icon: 'users' },
-  { key: 'reports',     label: 'Hisobot',      icon: 'bar-chart-2' },
+  { key: 'dashboard', label: 'Bosh sahifa', icon: 'home' },
+  { key: 'sales',     label: 'Sotuv',        icon: 'shopping-cart' },
+  { key: 'payments',  label: 'Kassa',        icon: 'layers' },
+  { key: 'reports',   label: 'Hisobot',      icon: 'bar-chart-2' },
 ]
 const items = computed(() => allItems.filter(i => canView(i.key)))
-
-// "Sotuvlar tarixi" — Sotuv sahifasining bir qismi (alohida ruxsat emas): sotuv
-// huquqi bor har bir kishi o'z savdolar tarixini ko'ra olishi kerak. Faqat sotuv
-// ko'rish huquqi bo'lganda asosiy panelga alohida yorliq sifatida qo'shiladi.
-const showHistoryItem = computed(() => canView('sales'))
 
 const allMoreGroups = [
   {
     label: 'Hujjatlar',
     items: [
       { key: 'purchases', label: 'Xarid (Kirim)',    icon: 'download',   color: '#34d399', bg: 'rgba(52,211,153,0.14)'  },
-      { key: 'payments',  label: 'Kassa',            icon: 'layers',     color: '#fbbf24', bg: 'rgba(251,191,36,0.14)'  },
       { key: 'partiya',   label: 'Partiyalar (Lot)', icon: 'archive',    color: '#34d399', bg: 'rgba(52,211,153,0.14)'  },
       { key: 'returns',   label: 'Qaytarishlar',     icon: 'rotate-ccw', color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
     ],
@@ -35,7 +29,9 @@ const allMoreGroups = [
   {
     label: 'Katalog',
     items: [
-      { key: 'products', label: 'Mahsulotlar', icon: 'package', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
+      { key: 'products',  label: 'Mahsulotlar',   icon: 'package', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
+      { key: 'partners',  label: 'Mijozlar',      icon: 'users',   color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
+      { key: 'suppliers', label: 'Yetkazuvchilar', icon: 'truck',   color: '#fb923c', bg: 'rgba(251,146,60,0.14)' },
     ],
   },
   {
@@ -56,46 +52,28 @@ const moreKeys = allMoreGroups.flatMap(g => g.items.map(i => i.key))
 const showMore = ref(false)
 
 function isActive(key) { return route.path === '/' + key && !route.query.mode }
-const isHistoryActive = computed(() => route.path === '/sales' && route.query.mode === 'history')
 const isMoreActive = computed(() => moreKeys.includes(route.path.slice(1)))
 
 function go(key) {
   router.push('/' + key)
   showMore.value = false
 }
-function goHistory() {
-  router.push({ path: '/sales', query: { mode: 'history' } })
-  showMore.value = false
-}
 </script>
 
 <template>
   <nav class="bn">
-    <template v-for="item in items" :key="item.key">
-      <button
-        class="bn__item"
-        :class="{ 'is-active': isActive(item.key) }"
-        @click="go(item.key)"
-      >
-        <span class="bn__ico-wrap">
-          <span class="bn__ico"><AppIcon :name="item.icon" :size="20" :stroke-width="isActive(item.key) ? 2.3 : 1.9"/></span>
-        </span>
-        <span class="bn__lbl">{{ item.label }}</span>
-      </button>
-
-      <!-- "Sotuvlar tarixi" — Sotuv yorlig'idan keyin, alohida ruxsat talab qilmaydi -->
-      <button
-        v-if="item.key === 'sales' && showHistoryItem"
-        class="bn__item"
-        :class="{ 'is-active': isHistoryActive }"
-        @click="goHistory"
-      >
-        <span class="bn__ico-wrap">
-          <span class="bn__ico"><AppIcon name="list" :size="20" :stroke-width="isHistoryActive ? 2.3 : 1.9"/></span>
-        </span>
-        <span class="bn__lbl">Tarix</span>
-      </button>
-    </template>
+    <button
+      v-for="item in items"
+      :key="item.key"
+      class="bn__item"
+      :class="{ 'is-active': isActive(item.key) }"
+      @click="go(item.key)"
+    >
+      <span class="bn__ico-wrap">
+        <span class="bn__ico"><AppIcon :name="item.icon" :size="20" :stroke-width="isActive(item.key) ? 2.3 : 1.9"/></span>
+      </span>
+      <span class="bn__lbl">{{ item.label }}</span>
+    </button>
 
     <button
       v-if="moreGroups.length"
@@ -158,13 +136,30 @@ function goHistory() {
   bottom: 0;
   z-index: 200;
   align-items: stretch;
-  background: rgba(255,255,255,0.92);
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(255,255,255,0.92), rgba(255,255,255,0.92)),
+    linear-gradient(120deg, #eef2ff, #fdf2f8, #ecfeff, #eef2ff);
+  background-size: 100% 100%, 300% 300%;
+  animation: bn-bg-flow 14s ease-in-out infinite;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-top: 1px solid rgba(15,23,42,0.08);
   box-shadow: 0 -8px 24px rgba(15,23,42,0.06);
   padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
-  height: calc(58px + env(safe-area-inset-bottom, 0px));
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+@keyframes bn-bg-flow {
+  0%, 100% { background-position: 0 0, 0% 50%; }
+  50%      { background-position: 0 0, 100% 50%; }
+}
+@media (prefers-color-scheme: dark) {
+  .bn {
+    background:
+      linear-gradient(rgba(15,15,26,0.85), rgba(15,15,26,0.85)),
+      linear-gradient(120deg, #1e1b4b, #2a1a3e, #142033, #1e1b4b);
+    background-size: 100% 100%, 300% 300%;
+  }
 }
 
 .bn__item {
@@ -203,9 +198,11 @@ function goHistory() {
 
 .bn__item.is-active { color: var(--indigo-600); }
 .bn__item.is-active .bn__ico-wrap {
-  background: var(--indigo-100);
+  background: linear-gradient(135deg, var(--indigo-500), var(--violet-500));
+  color: white;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.45);
 }
-.bn__item.is-active .bn__ico { transform: translateY(-1px); }
+.bn__item.is-active .bn__ico { color: white; transform: translateY(-1px); }
 .bn__item.is-active .bn__lbl { font-weight: 800; }
 
 /* tap ripple-ish pop */

@@ -1,6 +1,9 @@
 <script setup>
 import { computed } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import { loadStoreSettings } from '@/composables/useStoreSettings.js'
+
+const store = loadStoreSettings()
 
 const props = defineProps({
   cart:           { type: Array,  default: () => [] },
@@ -204,8 +207,10 @@ function printReceipt() {
             <div class="receipt-paper" id="pos-receipt">
               <div class="rp-perf rp-perf--top"></div>
               <div class="rp-body">
-                <div class="rp-store">POS TIZIMI</div>
-                <div class="rp-store-sub">Savdo markazi · Toshkent</div>
+                <div class="rp-store">{{ store.name }}</div>
+                <div v-if="store.address" class="rp-store-sub">{{ store.address }}</div>
+                <div v-if="store.phone" class="rp-store-sub">{{ store.phone }}</div>
+                <div v-if="store.header" class="rp-store-sub">{{ store.header }}</div>
                 <div class="rp-meta-row">
                   <span>{{ todayStr() }}</span>
                   <span>{{ timeStr() }}</span>
@@ -275,8 +280,7 @@ function printReceipt() {
                 </div>
 
                 <div class="rp-footer">
-                  <div class="rp-footer__line">★ Xarid uchun rahmat! ★</div>
-                  <div class="rp-footer__sub">Yana tashrif buyuring</div>
+                  <div class="rp-footer__line">{{ store.footer }}</div>
                 </div>
               </div>
               <div class="rp-perf rp-perf--bot"></div>

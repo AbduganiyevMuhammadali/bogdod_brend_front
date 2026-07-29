@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { isLoggedIn, logout } from '@/composables/useAuth.js'
-import { canView } from '@/composables/usePerms.js'
+import { canView, isDasturchi } from '@/composables/usePerms.js'
 import { showToast } from '@/composables/useToast.js'
 
 const routes = [
@@ -18,6 +18,7 @@ const routes = [
   { path: '/users',      component: () => import('@/pages/Users.vue'),         meta: { title: 'nav.users',      module: 'users' } },
   { path: '/reports',    component: () => import('@/pages/Reports.vue'),       meta: { title: 'nav.reports',    module: 'reports' } },
   { path: '/settings',   component: () => import('@/pages/Sozlamalar.vue'),    meta: { title: 'Sozlamalar',     module: 'settings' } },
+  { path: '/dev',        component: () => import('@/pages/Dasturchi.vue'),     meta: { title: 'Dasturchi',      requiresDasturchi: true } },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
 ]
 
@@ -40,6 +41,11 @@ export function firstAllowedPath() {
 router.beforeEach((to, _from, next) => {
   if (to.meta.public) return next()
   if (!isLoggedIn.value) return next('/login')
+
+  // Faqat "Dasturchi" hisobi kira oladigan sahifalar — Admin ham kirmaydi
+  if (to.meta.requiresDasturchi && !isDasturchi.value) {
+    return next(firstAllowedPath() || '/dashboard')
+  }
 
   // Modulga "ko'rish" ruxsati tekshiruvi (Admin hammasini ko'radi)
   if (to.meta.module && !canView(to.meta.module)) {
