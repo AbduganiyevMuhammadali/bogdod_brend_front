@@ -1,0 +1,164 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Indigo scale */
+  --indigo-50:  #eef2ff;
+  --indigo-100: #e0e7ff;
+  --indigo-200: #c7d2fe;
+  --indigo-400: #818cf8;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+  --indigo-700: #4338ca;
+  --indigo-800: #3730a3;
+  --indigo-900: #312e81;
+
+  /* Violet */
+  --violet-400: #a78bfa;
+  --violet-500: #8b5cf6;
+  --violet-600: #7c3aed;
+
+  /* Cyan */
+  --cyan-400: #22d3ee;
+  --cyan-500: #06b6d4;
+  --cyan-600: #0891b2;
+
+  /* Rose */
+  --rose-50:  #fff1f2;
+  --rose-100: #ffe4e6;
+  --rose-400: #fb7185;
+  --rose-500: #f43f5e;
+  --rose-600: #e11d48;
+  --rose-700: #be123c;
+
+  /* Amber */
+  --amber-50:  #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+
+  /* Emerald (for positive, not primary) */
+  --emerald-50:  #ecfdf5;
+  --emerald-100: #d1fae5;
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --emerald-700: #047857;
+
+  /* Slate (neutrals) */
+  --slate-50:  #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-150: #edf0f4;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-850: #172033;
+  --slate-900: #0f172a;
+  --slate-950: #080e1c;
+
+  /* Semantic tokens */
+  --color-bg:        #f0f2f7;
+  --color-surface:   #ffffff;
+  --color-border:    var(--slate-200);
+  --color-border-sub: #f1f5f9;
+  --color-text:      var(--slate-900);
+  --color-text-2:    var(--slate-600);
+  --color-text-3:    var(--slate-400);
+
+  /* Primary = Indigo */
+  --color-primary:      var(--indigo-500);
+  --color-primary-dark: var(--indigo-600);
+  --color-primary-dim:  var(--indigo-50);
+  --color-primary-border: var(--indigo-100);
+
+  /* Sidebar (dark) */
+  --sidebar-bg:          #1e1b4b;
+  --sidebar-border:      rgba(255,255,255,0.05);
+  --sidebar-text:        rgba(148,163,184,0.7);
+  --sidebar-text-hover:  #e2e8f0;
+  --sidebar-active-bg:   rgba(99,102,241,0.15);
+  --sidebar-active-text: #f8fafc;
+
+  /* Radius */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 18px;
+  --r-2xl: 24px;
+
+  /* Shadow */
+  --shadow-xs: 0 1px 2px rgba(15,23,42,0.05);
+  --shadow-sm: 0 1px 4px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md: 0 4px 16px rgba(15,23,42,0.08), 0 2px 4px rgba(15,23,42,0.04);
+  --shadow-lg: 0 10px 32px rgba(15,23,42,0.12), 0 4px 12px rgba(15,23,42,0.06);
+  --shadow-indigo: 0 4px 20px rgba(99,102,241,0.25);
+
+  /* Layout */
+  --sidebar-w: 256px;
+  --header-h:  62px;
+
+  /* Motion */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast: 0.12s ease;
+  --t-base: 0.18s ease;
+  --t-md:   0.24s var(--ease-spring);
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { height: 100%; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+a { text-decoration: none; color: inherit; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--slate-200); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--slate-300); }
+
+/* Skeleton */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--slate-150) 25%,
+    var(--slate-200) 50%,
+    var(--slate-150) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--r-sm);
+}
+
+.skeleton--dark {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.05) 25%,
+    rgba(255,255,255,0.10) 50%,
+    rgba(255,255,255,0.05) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Page transitions */
+.fade-enter-active { transition: opacity var(--t-md), transform var(--t-md); }
+.fade-leave-active { transition: opacity 0.1s ease; }
+.fade-enter-from   { opacity: 0; transform: translateY(6px); }
+.fade-leave-to     { opacity: 0; }
