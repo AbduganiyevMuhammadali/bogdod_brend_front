@@ -3,10 +3,14 @@
 // brauzer (veb) — Web Push (VAPID) orqali. iOS Safari: faqat "Bosh ekranga
 // qo'shish" orqali PWA rejimida ishlaydi (iOS 16.4+).
 import { ref } from 'vue'
-import { Capacitor } from '@capacitor/core'
 import { notificationsApi } from '@/api/notifications.js'
 
-const isNative = Capacitor.isNativePlatform()
+// Capacitor faqat APK ichida mavjud — u yerda global `window.Capacitor`
+// bo'ladi. Paketni statik import qilsak, veb uchun build qilinganda
+// (serverda Capacitor o'rnatilmagan) rollup uni topolmay yiqiladi.
+// Shuning uchun ish vaqtida global orqali tekshiramiz.
+const isNative = typeof window !== 'undefined'
+  && !!window.Capacitor?.isNativePlatform?.()
 
 export const pushSupported   = ref(isNative || ('serviceWorker' in navigator && 'PushManager' in window))
 export const pushPermission  = ref(typeof Notification !== 'undefined' ? Notification.permission : 'default')
