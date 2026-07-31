@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import { login, logout } from '@/composables/useAuth.js'
+import { API_URL as apiUrl } from '@/api/http.js'
 import { firstAllowedPath } from '@/router/index.js'
 
 const router   = useRouter()
@@ -11,6 +12,50 @@ const password = ref('')
 const showPass = ref(false)
 const loading  = ref(false)
 const error    = ref('')
+
+const diag     = ref('')
+const diagBusy = ref(false)
+
+// Build vaqti vite.config.js da __BUILD_TIME__ orqali kiritiladi.
+const buildTag = `build ${__BUILD_TIME__} · ${apiUrl.replace(/^https?:\/\//, '').replace(/\/api\/v\d+$/, '')}`
+
+// Serverga yetib borish-bormasligini bosqichma-bosqich tekshiradi. axios emas,
+// to'g'ridan-to'g'ri fetch ishlatamiz — shunda xato axios qatlamida
+// o'ralmasdan, asl holida ko'rinadi.
+async function runDiag() {
+  diagBusy.value = true
+  diag.value = ''
+  // Sahifa qaysi sxemadan yuklangani muhim: https:// dan http:// ga so'rov
+  // yuborish "mixed content" hisoblanadi va WebView uni bloklaydi.
+  const lines = [
+    `Manzil: ${apiUrl}`,
+    `Sahifa: ${location.origin}`,
+  ]
+  if (location.protocol === 'https:' && apiUrl.startsWith('http://')) {
+    lines.push('OGOHLANTIRISH: https sahifadan http so\'rov — WebView bloklashi mumkin.')
+  }
+
+  try {
+    const t0 = Date.now()
+    const r = await fetch(`${apiUrl}/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: '__ping__', password: '__ping__' }),
+    })
+    lines.push(`Javob: HTTP ${r.status} (${Date.now() - t0} ms)`)
+    lines.push(r.status === 401
+      ? 'Server ishlayapti. Demak login yoki parol xato.'
+      : 'Server javob berdi, lekin kutilmagan holat.')
+  } catch (e) {
+    lines.push(`Ulanmadi: ${e.name} — ${e.message}`)
+    lines.push(location.protocol === 'https:'
+      ? 'Ehtimoliy sabab: mixed content (https sahifa → http server).'
+      : 'Server topilmadi. Sabab: internet yo\'q yoki port yopiq.')
+  }
+
+  diag.value = lines.join('\n')
+  diagBusy.value = false
+}
 
 async function submit() {
   if (!username.value.trim() || !password.value) return
@@ -26,7 +71,16 @@ async function submit() {
     }
     router.push(target)
   } catch (e) {
-    error.value = e.response?.data?.message ?? "Login yoki parol noto'g'ri"
+    // Server javob bergan bo'lsa — uning xabarini ko'rsatamiz (401 = parol xato).
+    // Javob umuman kelmagan bo'lsa, bu tarmoq muammosi: serverga ulanib
+    // bo'lmadi. Ilgari bu ham "parol xato" deb ko'rsatilardi va sabab
+    // yashirinib qolardi — shuning uchun ularni ajratamiz.
+    if (e.response) {
+      error.value = e.response.data?.message ?? "Login yoki parol noto'g'ri"
+    } else {
+      const reason = e.code === 'ECONNABORTED' ? 'so\'rov muddati tugadi' : (e.message || 'noma\'lum xato')
+      error.value = `Serverga ulanib bo'lmadi (${reason}). Manzil: ${apiUrl}`
+    }
   } finally {
     loading.value = false
   }
@@ -105,6 +159,15 @@ async function submit() {
           {{ error }}
         </div>
 
+        <!-- Ulanish diagnostikasi: xato chiqqanda serverga yetib borish-bormasligini
+             tekshirish uchun. Telefonda log ko'rish imkoni yo'q holatlar uchun. -->
+        <div v-if="error" class="lf__diag">
+          <button type="button" class="lf__diag-btn" :disabled="diagBusy" @click="runDiag">
+            {{ diagBusy ? 'Tekshirilmoqda...' : 'Ulanishni tekshirish' }}
+          </button>
+          <pre v-if="diag" class="lf__diag-out">{{ diag }}</pre>
+        </div>
+
         <button type="submit" class="lf__btn" :disabled="loading">
           <span v-if="loading" class="lf__spinner"></span>
           <AppIcon v-else name="log-in" :size="16" :stroke-width="2.2" />
@@ -116,6 +179,11 @@ async function submit() {
       <p class="login-card__hint">
         <AppIcon name="info" :size="12" /> Standart: <strong>Admin</strong> / <strong>123456</strong>
       </p>
+
+      <!-- Qaysi build o'rnatilganini va qaysi serverga ulanayotganini
+           bir qarashda bilish uchun. Yangi APK o'rnatilganini shu yerdan
+           tekshirsa bo'ladi. -->
+      <p class="login-card__build">{{ buildTag }}</p>
 
     </div>
   </div>
@@ -249,6 +317,40 @@ async function submit() {
   border-radius: 8px;
   font-size: 12.5px;
   color: #e11d48;
+}
+
+.login-card__build {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 10.5px;
+  color: #94a3b8;
+  letter-spacing: .2px;
+}
+
+.lf__diag { display: flex; flex-direction: column; gap: 8px; }
+
+.lf__diag-btn {
+  align-self: flex-start;
+  padding: 7px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 12px;
+  color: #475569;
+  cursor: pointer;
+}
+.lf__diag-btn:disabled { opacity: .6; cursor: default; }
+
+.lf__diag-out {
+  margin: 0;
+  padding: 10px 12px;
+  background: #0f172a;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .lf__btn {

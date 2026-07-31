@@ -8,6 +8,7 @@ import { salesApi }    from '@/api/sales.js'
 import { productsApi }  from '@/api/products.js'
 import { clientsApi }   from '@/api/clients.js'
 import { purchasesApi } from '@/api/purchases.js'
+import { fileUrl }      from '@/api/http.js'
 import { beep }         from '@/composables/useBeep.js'
 import { canAdd }       from '@/composables/usePerms.js'
 import { loadStoreSettings } from '@/composables/useStoreSettings.js'
@@ -771,7 +772,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
             <div class="pcard__top" :style="p.photo ? {} : { background: cardColor(idx), color: textColor(idx) }">
               <img
                 v-if="p.photo"
-                :src="`http://localhost:3001${p.photo}`"
+                :src="fileUrl(p.photo)"
                 class="pcard__photo" alt=""
                 @error="e => e.target.parentElement.style.background = cardColor(idx)"
               />

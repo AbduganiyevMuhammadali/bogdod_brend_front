@@ -29,7 +29,10 @@ const roleLabel = computed(() => (me.value?.role === 'admin' ? 'Administrator' :
 // Faqat "ko'rish" ruxsati bor bo'limlar; bo'sh qolgan guruh butunlay yashiriladi
 const visibleGroups = computed(() =>
   navGroups
-    .map(g => ({ ...g, items: g.items.filter(i => canView(i.key)) }))
+    // Ba'zi bandlar boshqa modulning ruxsatiga tayanadi (masalan "Tezkor
+    // kiritish" — products). Shunda `module` ko'rsatiladi, aks holda
+    // bandning o'z kaliti tekshiriladi.
+    .map(g => ({ ...g, items: g.items.filter(i => canView(i.module || i.key)) }))
     .filter(g => g.items.length)
 )
 
@@ -64,6 +67,7 @@ const navGroups = [
     label: 'Katalog',
     items: [
       { key: 'products',   label: 'Mahsulotlar',   icon: 'package',    color: '#38bdf8', bg: 'rgba(56,189,248,0.14)'  },
+      { key: 'tezkor',     label: 'Tezkor kiritish', icon: 'zap',      color: '#38bdf8', bg: 'rgba(56,189,248,0.14)', module: 'products' },
       { key: 'partners',   label: 'Mijozlar',      icon: 'users',      color: '#38bdf8', bg: 'rgba(56,189,248,0.14)'  },
       { key: 'suppliers',  label: 'Yetkazuvchilar', icon: 'truck',      color: '#fb923c', bg: 'rgba(251,146,60,0.14)'  },
     ],

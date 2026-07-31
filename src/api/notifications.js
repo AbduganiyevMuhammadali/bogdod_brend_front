@@ -10,6 +10,13 @@ export const notificationsApi = {
   unsubscribe(endpoint) {
     return http.post('/notifications/unsubscribe', { endpoint })
   },
+  // Android (Capacitor) ilova uchun FCM token
+  registerFcmToken(token) {
+    return http.post('/notifications/fcm-register', { token })
+  },
+  unregisterFcmToken(token) {
+    return http.post('/notifications/fcm-unregister', { token })
+  },
   // Faqat Dasturchi huquqi bilan ishlaydi (backend tekshiradi)
   getSettings() {
     return http.get('/notifications/settings').then(r => r.data)

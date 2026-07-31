@@ -6,7 +6,7 @@ import { productsApi }  from '@/api/products.js'
 import { suppliersApi } from '@/api/suppliers.js'
 import { beep }         from '@/composables/useBeep.js'
 import { canAdd, canEdit } from '@/composables/usePerms.js'
-import { printBarcodeLabels, genBarcode } from '@/composables/useBarcodePrint.js'
+import { printLabels58x40, genBarcode } from '@/composables/useBarcodePrint.js'
 
 const WAREHOUSES = ['Asosiy ombor', '2-filial', '3-filial']
 
@@ -235,9 +235,9 @@ async function ensureProductBarcode(product) {
   return code
 }
 
-// ── Barcode yorliqlarini chop etish ──────────────────────────────
+// ── Barcode yorliqlarini chop etish (58×40 mm etiket printeri) ────
 function printRowLabel(item) {
-  printBarcodeLabels([{
+  printLabels58x40([{
     name:    item.productName,
     price:   item.retailPriceSum,
     barcode: item.barcode,
@@ -253,7 +253,7 @@ function printAllLabels() {
       barcode: i.barcode,
       qty:     Math.max(1, Math.round(Number(i.unitQty) || 1)),
     }))
-  printBarcodeLabels(rows)
+  printLabels58x40(rows)
 }
 
 // ── Quick barcode scan ───────────────────────────────────────────
@@ -519,7 +519,12 @@ function clampDropX(pos) {
           <tr v-for="d in docs" :key="d.id" class="ktbl__row" @click="openEdit(d.id)">
             <td><span class="doc-num">#{{ d.docNumber }}</span></td>
             <td class="ktbl__date">{{ d.date?.slice(0,10).split('-').reverse().join('.') }}</td>
-            <td><span class="ktbl__supplier">{{ d.supplier || '—' }}</span></td>
+            <td>
+              <span class="ktbl__supplier">{{ d.supplier || '—' }}</span>
+              <!-- Yetkazuvchisiz hujjatlarni ajratish uchun izohni ko'rsatamiz
+                   (masalan tezkor kiritishdagi "Boshlang'ich qoldiq") -->
+              <span v-if="!d.supplier && d.comment" class="ktbl__note">{{ d.comment }}</span>
+            </td>
             <td><span class="wh-tag">{{ d.warehouse }}</span></td>
             <td class="ta-c"><span class="items-badge">{{ d.itemCount }} ta</span></td>
             <td class="ta-r ktbl__usd">${{ fmtD(d.totalUsd) }}</td>
@@ -1140,6 +1145,10 @@ function clampDropX(pos) {
 .doc-num { font-family: monospace; font-weight: 800; color: var(--indigo-600); background: var(--indigo-50); padding: 2px 8px; border-radius: var(--r-xs); }
 .ktbl__date { color: var(--color-text-2); font-size: 12.5px; }
 .ktbl__supplier { font-weight: 600; color: var(--color-text); }
+.ktbl__note {
+  display: block; margin-top: 2px;
+  font-size: 11px; color: var(--color-text-muted, #94a3b8);
+}
 .wh-tag { background: var(--slate-100); color: var(--color-text-2); padding: 3px 8px; border-radius: var(--r-sm); font-size: 12px; }
 .items-badge { background: var(--emerald-50); color: var(--emerald-700); padding: 2px 8px; border-radius: 99px; font-size: 11.5px; font-weight: 700; }
 .ktbl__usd { font-weight: 700; color: var(--emerald-600); }

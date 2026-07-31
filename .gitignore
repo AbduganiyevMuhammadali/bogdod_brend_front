@@ -1,0 +1,26 @@
+# Bog'liqliklar — har muhitda `npm install` bilan tiklanadi
+node_modules/
+
+# Build natijasi — serverda `npm run build` bilan yasaladi
+dist/
+dist-ssr/
+
+# Muhit sozlamalari (server manzillari, kalitlar)
+.env
+.env.local
+.env.*.local
+
+# Capacitor / Android — APK lokalda yig'iladi.
+# google-services.json Firebase kalitini saqlaydi, repoga tushmasligi kerak.
+android/
+ios/
+*.apk
+*.aab
+*.keystore
+
+# Muharrir va OS fayllari
+.vscode/
+.idea/
+.DS_Store
+*.log
+npm-debug.log*

@@ -98,6 +98,24 @@ export const productsApi = {
     return toFrontend(res.data)
   },
 
+  // Tezkor kiritish: ko'p mahsulotni bir so'rovda yaratadi va ular uchun
+  // bitta "boshlang'ich qoldiq" kirim hujjatini ochadi (FIFO tannarx uchun).
+  // Har element qo'shimcha `costPrice`, `qty` va ixtiyoriy `sizes` oladi.
+  async bulkCreate(rows, opts = {}) {
+    const items = rows.map(r => ({
+      ...toBackend(r),
+      cost_price: Number(r.costPrice) || 0,
+      qty:        Number(r.qty)       || 0,
+      ...(r.sizes?.length ? { sizes: r.sizes } : {}),
+    }))
+    const res = await http.post('/products/bulk', {
+      items,
+      supplier_id: opts.supplierId ?? null,
+      doc_date:    opts.docDate    ?? null,
+    })
+    return res.data
+  },
+
   async update(id, form) {
     const res = await http.put(`/products/${id}`, toBackend(form))
     return toFrontend(res.data)

@@ -4,7 +4,9 @@ import BaseModal   from '@/components/sales/BaseModal.vue'
 import AppIcon     from '@/components/AppIcon.vue'
 import SelectOrAdd from './SelectOrAdd.vue'
 import { productsApi } from '@/api/products.js'
+import { fileUrl } from '@/api/http.js'
 import { genBarcode } from '@/composables/useBarcodePrint.js'
+import * as CATALOG from '@/constants/catalog.js'
 
 const props = defineProps({
   product: { type: Object, default: null },
@@ -13,16 +15,15 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save'])
 
 // ── Options ──────────────────────────────────────────────────────────
-const UNITS      = ref(['Dona', 'kg', 'g', 'litr', 'ml', 'metr', 'sm', 'm²', 'juft', 'quti', 'paket', "to'plam"])
-const BRANDS     = ref(['Nike', 'Adidas', "Levi's", 'Zara', 'H&M', 'Samsung', 'Apple', 'Xiaomi', 'LG', 'Sony', 'Nestle', 'Coca-Cola'])
+// Ro'yxatlar @/constants/catalog.js da — tezkor kiritish sahifasi bilan
+// bir xil bo'lishi uchun bitta manbadan olinadi.
+const UNITS      = ref([...CATALOG.UNITS])
+const BRANDS     = ref([...CATALOG.BRANDS])
 const MODELS     = ref([])
-const COUNTRIES  = ref(["O'zbekiston", 'Rossiya', 'Xitoy', 'Turkiya', 'Germaniya', 'AQSH', 'Koreya', 'Yaponiya', 'Hindiston'])
-const GROUPS     = ref(["Kiyim", 'Shim', 'Futbolka', 'Oyoq kiyim', "Ko'ylak", 'Kurtka', 'Bola kiyim',
-                        'Ichimliklar', 'Taom', 'Shirinliklar', 'Sneklar', 'Elektronika',
-                        "Oziq-ovqat", "Sog'liq", "Uy-ro'zg'or", 'Sport'])
-const COLORS     = ref(["Oq", "Qora", "Ko'k", "Qizil", 'Yashil', 'Sariq', 'Kulrang',
-                        'Binafsha', "To'q sariq", 'Pushti', "To'q ko'k", 'Jigarrang', 'Mavi', 'Zangori'])
-const CURRENCIES = ref(["So'm", 'USD', 'EUR', 'RUB'])
+const COUNTRIES  = ref([...CATALOG.COUNTRIES])
+const GROUPS     = ref([...CATALOG.GROUPS])
+const COLORS     = ref([...CATALOG.COLORS])
+const CURRENCIES = ref([...CATALOG.CURRENCIES])
 
 // ── Form ─────────────────────────────────────────────────────────────
 const p = props.product
@@ -41,7 +42,7 @@ const form = reactive({
   extraName1:  p?.extraName1   ?? '',
   barcodes:    Array.isArray(p?.barcodes) && p.barcodes.length ? [...p.barcodes] : [],
   newBarcode:  '',
-  photoPreview: p?.photo ? `http://localhost:3001${p.photo}` : null,
+  photoPreview: fileUrl(p?.photo),
   photoFile:    null,
   wholesalePrice:    p ? (Number(p.wholesalePrice)    || 0)  : 0,
   wholesalePriceUSD: p ? (Number(p.wholesalePriceUSD) || '') : '',
@@ -78,8 +79,7 @@ function onPhoto(e) {
 const sizesMode = ref(false)
 const sizes     = ref([])  // [{ size, qty, barcode }]
 
-const SIZE_ALPHA = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL']
-const SIZE_NUM   = ['34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '48', '50', '52']
+const { SIZE_ALPHA, SIZE_JEANS, SIZE_EVEN, SIZE_CLASSIC, SIZE_NUM } = CATALOG
 
 const sizeSet = computed(() => new Set(sizes.value.map(s => s.size)))
 
@@ -87,12 +87,7 @@ function addSize(s) {
   if (sizeSet.value.has(s)) return
   sizes.value.push({ size: s, qty: 1, barcode: genBarcode() })
 }
-function addSizeRange(from, to) {
-  SIZE_NUM.forEach(s => {
-    const n = parseInt(s)
-    if (n >= from && n <= to) addSize(s)
-  })
-}
+function addSizeSet(list) { list.forEach(s => addSize(s)) }
 function removeSize(i){ sizes.value.splice(i, 1) }
 function genSizeBc(i){ sizes.value[i].barcode = genBarcode() }
 
@@ -344,11 +339,11 @@ function fmt(v) { return new Intl.NumberFormat('uz-UZ').format(v) }
             </div>
 
             <div class="sz-preset-group">
-              <span class="sz-preset-label">Diapazon:</span>
-              <button class="sz-range-btn" @click="addSizeRange(36, 40)">36–40</button>
-              <button class="sz-range-btn" @click="addSizeRange(40, 44)">40–44</button>
-              <button class="sz-range-btn" @click="addSizeRange(44, 50)">44–50</button>
-              <button class="sz-range-btn" @click="SIZE_ALPHA.forEach(s => addSize(s))">S–XXL</button>
+              <span class="sz-preset-label">To'plam:</span>
+              <button class="sz-range-btn" @click="addSizeSet(SIZE_JEANS)">Jinsi 29–34</button>
+              <button class="sz-range-btn" @click="addSizeSet(SIZE_EVEN)">Shim 36–46</button>
+              <button class="sz-range-btn" @click="addSizeSet(SIZE_CLASSIC)">Klassik 44–60</button>
+              <button class="sz-range-btn" @click="addSizeSet(SIZE_ALPHA)">Harfli S–10XL</button>
             </div>
           </div>
 
