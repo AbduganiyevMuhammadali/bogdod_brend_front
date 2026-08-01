@@ -14,7 +14,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import { productsApi } from '@/api/products.js'
 import { suppliersApi } from '@/api/suppliers.js'
 import { purchasesApi } from '@/api/purchases.js'
-import { genBarcode, printLabels58x40 } from '@/composables/useBarcodePrint.js'
+import { genBarcode, printLabels58x40, getLabelSize, setLabelSize } from '@/composables/useBarcodePrint.js'
 import { showToast } from '@/composables/useToast.js'
 
 // Ro'yxatlar mahsulot formasi bilan bir xil bo'lishi uchun bitta manbadan
@@ -244,6 +244,29 @@ function clearPrintQueue() {
   printQueue.value = []
 }
 
+// ── Yorliq o'lchamini sozlash ───────────────────────────────────────────
+// Etiket lentalari har xil bo'ladi va printer sahifa o'lchamini noto'g'ri
+// olsa, yorliq siljib chiqadi. Shuning uchun o'lchamni qo'lda kiritish va
+// bitta sinov yorlig'ini chop etib tekshirish imkonini beramiz.
+const showSize = ref(false)
+const labelW = ref(getLabelSize().w)
+const labelH = ref(getLabelSize().h)
+
+function saveLabelSize() {
+  setLabelSize(Number(labelW.value), Number(labelH.value))
+  showToast(`Yorliq o'lchami: ${labelW.value}×${labelH.value} mm`, 'ok')
+}
+
+function printTestLabel() {
+  saveLabelSize()
+  printLabels58x40([{
+    name: 'SINOV — chetlarni tekshiring',
+    price: 199000,
+    barcode: genBarcode(),
+    qty: 1,
+  }])
+}
+
 // ── Tarix ───────────────────────────────────────────────────────────────
 // Har saqlash bitta "Boshlang'ich qoldiq" kirim hujjatini yaratadi, shuning
 // uchun tarix o'sha hujjatlar ustiga quriladi — sahifa yopilsa ham yo'qolmaydi
@@ -447,11 +470,28 @@ function fmtTime(s) {
           <input type="checkbox" v-model="printPerItem" />
           Har dona uchun alohida yorliq
         </label>
+        <button class="qi__btn qi__btn--ghost" @click="showSize = !showSize">
+          {{ labelW }}×{{ labelH }} mm
+        </button>
         <button class="qi__btn qi__btn--ghost" @click="clearPrintQueue">Tozalash</button>
         <button class="qi__btn qi__btn--print" @click="doPrint">
           <AppIcon name="printer" :size="15" /> Chop etish
         </button>
       </div>
+    </div>
+
+    <!-- Yorliq o'lchamini sozlash: lenta va printer har xil bo'lgani uchun -->
+    <div v-if="showSize" class="qi__size">
+      <div class="qi__size-row">
+        <label>Kenglik <input type="number" v-model.number="labelW" min="20" max="120" /> mm</label>
+        <label>Balandlik <input type="number" v-model.number="labelH" min="15" max="120" /> mm</label>
+        <button class="qi__btn qi__btn--ghost" @click="printTestLabel">Sinov yorlig'i</button>
+        <button class="qi__btn qi__btn--print" @click="saveLabelSize">Saqlash</button>
+      </div>
+      <p class="qi__size-hint">
+        Yorliq siljib chiqsa: lentadagi bitta yorliqni lineyka bilan o'lchang va shu yerga yozing.
+        Chop etish oynasida <strong>Margins: None</strong>, <strong>Scale: 100</strong> bo'lsin.
+      </p>
     </div>
 
     <!-- Yetkazuvchi -->
@@ -761,6 +801,25 @@ function fmtTime(s) {
   border: none; background: #2563eb; color: #fff; font-weight: 600;
 }
 .qi__btn--print:hover { background: #1d4ed8; }
+
+/* Yorliq o'lchamini sozlash paneli */
+.qi__size {
+  margin: -6px 0 12px; padding: 11px 14px;
+  background: #fff; border: 1px solid #bfdbfe; border-radius: 0 0 10px 10px;
+}
+.qi__size-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.qi__size-row label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #334155;
+}
+.qi__size-row input {
+  width: 62px; padding: 5px 7px;
+  border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 12.5px; text-align: center;
+}
+.qi__size-hint {
+  margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: #64748b;
+}
 
 .qi__toolbar { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
 .qi__sup { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; }

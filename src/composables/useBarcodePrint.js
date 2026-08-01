@@ -11,10 +11,22 @@ export function genBarcode() {
   return d.join('') + ((10 - (s % 10)) % 10)
 }
 
+// genBarcode() EAN-13 qoidasi bo'yicha raqam yasaydi (13 xona + nazorat
+// raqami). EAN-13 do'kon skanerlari uchun standart va CODE128 dan ixcham —
+// tor yorliqqa yaxshiroq sig'adi. Qo'lda kiritilgan yoki boshqa uzunlikdagi
+// kodlar EAN-13 ga to'g'ri kelmaydi, ular uchun CODE128 ga qaytamiz.
+function isValidEan13(code) {
+  const s = String(code || '')
+  if (!/^\d{13}$/.test(s)) return false
+  const sum = s.slice(0, 12).split('').reduce(
+    (a, d, i) => a + Number(d) * (i % 2 === 0 ? 1 : 3), 0
+  )
+  return ((10 - (sum % 10)) % 10) === Number(s[12])
+}
+
 function barcodeToPng(code, opts = {}) {
   const canvas = document.createElement('canvas')
-  const cfg = {
-    format: 'CODE128',
+  const base = {
     width: 2,
     height: 55,
     displayValue: true,
@@ -22,11 +34,18 @@ function barcodeToPng(code, opts = {}) {
     margin: 6,
     ...opts,
   }
+
+  const useEan = isValidEan13(code)
   try {
-    JsBarcode(canvas, code, cfg)
+    JsBarcode(canvas, code, { ...base, format: useEan ? 'EAN13' : 'CODE128' })
   } catch {
-    // Yaroqsiz belgilar (masalan bo'sh/juda qisqa) bo'lsa ham chek qolmasin
-    JsBarcode(canvas, code || '0000000000000', cfg)
+    try {
+      // EAN13 rad etsa — CODE128 deyarli har qanday matnni qabul qiladi
+      JsBarcode(canvas, code, { ...base, format: 'CODE128' })
+    } catch {
+      // Bo'sh/yaroqsiz bo'lsa ham chop etish to'xtab qolmasin
+      JsBarcode(canvas, '0000000000000', { ...base, format: 'CODE128' })
+    }
   }
   return canvas.toDataURL('image/png')
 }
@@ -89,8 +108,24 @@ export function printBarcodeLabels(items) {
 //   nomi     — 2 qatorgacha, o'lchami avtomatik qisqaradi
 //   narxi    — eng yirik, xaridor uzoqdan ko'radi
 //   shtrix   — pastda, skaner ishonchli o'qishi uchun kengaytirilgan
-const LABEL_W_MM = 58
-const LABEL_H_MM = 40
+// Yorliq o'lchami. Printer va lenta har xil bo'lgani uchun sozlanadi —
+// qiymat localStorage'da saqlanadi, Sozlamalardan o'zgartiriladi.
+const DEFAULT_W_MM = 58
+const DEFAULT_H_MM = 40
+
+export function getLabelSize() {
+  const w = Number(localStorage.getItem('label_w_mm'))
+  const h = Number(localStorage.getItem('label_h_mm'))
+  return {
+    w: w > 0 ? w : DEFAULT_W_MM,
+    h: h > 0 ? h : DEFAULT_H_MM,
+  }
+}
+
+export function setLabelSize(w, h) {
+  if (Number(w) > 0) localStorage.setItem('label_w_mm', String(w))
+  if (Number(h) > 0) localStorage.setItem('label_h_mm', String(h))
+}
 
 function labelHtml58x40(item) {
   // Shtrix-kodni yuqori aniqlikda chizamiz (width: 3), so'ng CSS bilan
@@ -132,6 +167,8 @@ function escapeHtml(s) {
 export function printLabels58x40(items) {
   const list = (items || []).filter(i => i && i.barcode)
   if (!list.length) return false
+
+  const { w: LABEL_W_MM, h: LABEL_H_MM } = getLabelSize()
 
   const labels = list
     .flatMap(i => Array.from({ length: Math.max(1, Number(i.qty) || 1) }, () => labelHtml58x40(i)))
