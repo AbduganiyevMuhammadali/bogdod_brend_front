@@ -93,19 +93,27 @@ const LABEL_W_MM = 58
 const LABEL_H_MM = 40
 
 function labelHtml58x40(item) {
-  // Etiket tor bo'lgani uchun shtrix-kod ham ixchamroq chiziladi;
-  // raqamni pastida alohida yozamiz, shunda skaner zonasi kengroq qoladi.
+  // Shtrix-kodni yuqori aniqlikda chizamiz (width: 3), so'ng CSS bilan
+  // yorliq kengligiga siqamiz — termal printerda chiziqlar tiniq chiqadi.
   const png = barcodeToPng(item.barcode, {
-    width: 2,
-    height: 40,
+    width: 3,
+    height: 70,
     displayValue: false,
     margin: 0,
   })
-  const name = String(item.name || '').trim()
+
+  const name  = String(item.name || '').trim()
+  const price = Number(item.price) || 0
+  // Narx 0 bo'lsa yozmaymiz — bo'sh joy nom uchun qoladi va
+  // yorliqda "0 so'm" degan chalg'ituvchi yozuv turmaydi.
+  const priceHtml = price > 0
+    ? `<div class="lb__price">${fmt(price)} so'm</div>`
+    : ''
+
   return `
     <div class="lb">
       <div class="lb__name">${escapeHtml(name)}</div>
-      <div class="lb__price">${fmt(item.price)} so'm</div>
+      ${priceHtml}
       <img class="lb__bc" src="${png}" />
       <div class="lb__code">${escapeHtml(item.barcode)}</div>
     </div>`
@@ -134,21 +142,26 @@ export function printLabels58x40(items) {
 
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Yorliqlar ${LABEL_W_MM}×${LABEL_H_MM}mm</title><style>
+    /* Sahifa aynan yorliq o'lchamida — printer har yorliqni alohida
+       sahifa deb qabul qiladi va A4 ga terib yubormaydi */
     @page { size: ${LABEL_W_MM}mm ${LABEL_H_MM}mm; margin: 0; }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, 'Segoe UI', sans-serif; background: #e5e7eb; }
+    html, body { width: ${LABEL_W_MM}mm; }
+    body { font-family: Arial, 'Segoe UI', sans-serif; }
 
     .lb {
       width: ${LABEL_W_MM}mm;
       height: ${LABEL_H_MM}mm;
-      padding: 1.5mm 2mm;
+      /* Termal printerlar chetlarga bosa olmaydi — 2mm hoshiya qoldiramiz */
+      padding: 2mm;
       background: #fff;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      gap: 1mm;
       overflow: hidden;
-      /* Har yorliq — alohida sahifa */
       page-break-after: always;
       break-after: page;
       page-break-inside: avoid;
@@ -158,46 +171,60 @@ export function printLabels58x40(items) {
 
     .lb__name {
       width: 100%;
-      font-size: 3mm;
+      font-size: 2.9mm;
       font-weight: 700;
-      line-height: 1.2;
+      line-height: 1.15;
       text-align: center;
-      /* Uzun nomlar 2 qatorda kesiladi */
+      /* Uzun nomlar 2 qatorda kesiladi, yorliqdan chiqib ketmaydi */
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      max-height: 7.2mm;
+      word-break: break-word;
+      max-height: 6.7mm;
+      flex-shrink: 0;
     }
     .lb__price {
-      font-size: 6mm;
+      font-size: 5.2mm;
       font-weight: 900;
-      line-height: 1;
+      line-height: 1.05;
       color: #000;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .lb__bc {
       width: 100%;
-      height: 15mm;
+      max-width: 52mm;
+      height: 14mm;
+      /* fill emas — nisbat buzilmasin, skaner o'qishi shunga bog'liq */
       object-fit: contain;
       display: block;
+      flex-shrink: 0;
     }
     .lb__code {
-      font-size: 3mm;
+      font-size: 2.9mm;
       font-weight: 600;
-      letter-spacing: .35mm;
+      letter-spacing: .3mm;
       line-height: 1;
       font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
     }
 
     /* Ekranda ko'rish uchun — chop etishda yo'qoladi */
     @media screen {
-      body { padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-      .lb { border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+      html, body { width: auto; }
+      body {
+        background: #e5e7eb; padding: 14px;
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
+      }
+      .lb { border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
     }
     @media print {
-      body { background: #fff; padding: 0; display: block; }
+      html, body { background: #fff; }
+      body { padding: 0; display: block; }
       .lb { border: none; box-shadow: none; }
+      /* Termal printerda kulrang tuslar yo'qoladi — qora aniq bosilsin */
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style></head><body>${labels}</body></html>`)
 
