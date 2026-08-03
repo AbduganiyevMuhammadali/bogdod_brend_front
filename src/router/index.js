@@ -10,6 +10,7 @@ const routes = [
   { path: '/sales',      component: () => import('@/pages/Sales.vue'),         meta: { title: 'nav.sales',     module: 'sales', fullscreen: true } },
   { path: '/products',   component: () => import('@/pages/Products.vue'),      meta: { title: 'nav.products',  module: 'products' } },
   { path: '/tezkor',     component: () => import('@/pages/TezkorKiritish.vue'), meta: { title: 'Tezkor kiritish', module: 'products' } },
+  { path: '/inventarizatsiya', component: () => import('@/pages/Inventarizatsiya.vue'), meta: { title: 'Inventarizatsiya', module: 'products' } },
   { path: '/purchases',  component: () => import('@/pages/Kirim.vue'),         meta: { title: 'nav.purchases', module: 'purchases' } },
   { path: '/partiya',    component: () => import('@/pages/Partiyalar.vue'),    meta: { title: 'nav.partiya',   module: 'partiya' } },
   { path: '/partners',   component: () => import('@/pages/Kontragentlar.vue'), meta: { title: 'nav.customers', module: 'partners' } },

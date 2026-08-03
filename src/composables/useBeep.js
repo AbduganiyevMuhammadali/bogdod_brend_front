@@ -41,6 +41,35 @@ export function beep(kind = 'add') {
       tone(1320, 0.11, 0.16)
     } else if (kind === 'error') {
       tone(220, 0, 0.22, 0.2, 'square')
+
+    // ── Inventarizatsiya signallari ────────────────────────────────
+    // Sanoqchi ekranga qaramasdan, faqat ovozdan holatni ajrata olishi
+    // kerak — shuning uchun har biri sezilarli darajada farq qiladi.
+
+    } else if (kind === 'found') {
+      // Topildi — yumshoq ko'tariluvchi ikki nota, quloqqa yoqimli
+      tone(1046, 0,     0.075, 0.14)   // C6
+      tone(1568, 0.075, 0.13,  0.13)   // G6
+    } else if (kind === 'duplicate') {
+      // Qayta urildi — past, takrorlanuvchi ogohlantirish.
+      // Xato emas, shuning uchun keskin emas, lekin darhol sezilади.
+      tone(420, 0,    0.1, 0.18, 'triangle')
+      tone(420, 0.14, 0.1, 0.18, 'triangle')
+    } else if (kind === 'extra') {
+      // Ortiqcha — hisobda yo'q yoki ko'p chiqdi: o'rta balandlikda
+      // uch nota, "diqqat" ma'nosida
+      tone(760, 0,    0.07, 0.15)
+      tone(660, 0.08, 0.07, 0.15)
+      tone(560, 0.16, 0.12, 0.15)
+    } else if (kind === 'unknown') {
+      // Bazada umuman yo'q tovar — pastga tushuvchi, aniq salbiy
+      tone(400, 0,    0.11, 0.19, 'square')
+      tone(260, 0.12, 0.20, 0.19, 'square')
+    } else if (kind === 'finish') {
+      // Sanoq yakunlandi — uch notali ko'tariluvchi akkord
+      tone(784,  0,    0.11, 0.14)   // G5
+      tone(1046, 0.11, 0.11, 0.14)   // C6
+      tone(1568, 0.22, 0.26, 0.15)   // G6
     }
   } catch { /* ovoz ishlamasa ham dastur ishlashda davom etadi */ }
 }
