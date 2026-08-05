@@ -368,12 +368,34 @@ function fmtTime(s) {
           Saqlaganda boshlang'ich qoldiq kirimi avtomatik yaratiladi.
         </p>
       </div>
-      <div v-if="savedCount" class="qi__saved">
-        <AppIcon name="check-circle" :size="15" />
-        <span>Bu sessiyada saqlandi: <strong>{{ savedCount }}</strong></span>
-        <router-link to="/products" class="qi__link">Mahsulotlar</router-link>
-        <router-link to="/purchases" class="qi__link">Kirim hujjatlari</router-link>
+      <div class="qi__head-r">
+        <!-- Yorliq o'lchamini oldindan sozlash uchun — chop etish
+             ro'yxati bo'sh bo'lganda ham kerak bo'ladi -->
+        <button class="qi__btn qi__btn--ghost" title="Yorliq o'lchamini sozlash" @click="showSize = !showSize">
+          <AppIcon name="printer" :size="14" /> {{ labelW }}×{{ labelH }} mm
+        </button>
+
+        <div v-if="savedCount" class="qi__saved">
+          <AppIcon name="check-circle" :size="15" />
+          <span>Bu sessiyada saqlandi: <strong>{{ savedCount }}</strong></span>
+          <router-link to="/products" class="qi__link">Mahsulotlar</router-link>
+          <router-link to="/purchases" class="qi__link">Kirim hujjatlari</router-link>
+        </div>
       </div>
+    </div>
+
+    <!-- Yorliq o'lchamini sozlash — sarlavhadagi tugma orqali ochiladi -->
+    <div v-if="showSize" class="qi__size qi__size--top">
+      <div class="qi__size-row">
+        <label>Kenglik <input type="number" v-model.number="labelW" min="20" max="120" /> mm</label>
+        <label>Balandlik <input type="number" v-model.number="labelH" min="15" max="120" /> mm</label>
+        <button class="qi__btn qi__btn--ghost" @click="printTestLabel">Sinov yorlig'i</button>
+        <button class="qi__btn qi__btn--print" @click="saveLabelSize">Saqlash</button>
+      </div>
+      <p class="qi__size-hint">
+        Lentadagi bitta yorliqni lineyka bilan o'lchang va shu yerga yozing.
+        Chop etish oynasida <strong>Margins: None</strong>, <strong>Scale: 100</strong> bo'lsin.
+      </p>
     </div>
 
     <!-- Rejim tanlash -->
@@ -470,28 +492,11 @@ function fmtTime(s) {
           <input type="checkbox" v-model="printPerItem" />
           Har dona uchun alohida yorliq
         </label>
-        <button class="qi__btn qi__btn--ghost" @click="showSize = !showSize">
-          {{ labelW }}×{{ labelH }} mm
-        </button>
         <button class="qi__btn qi__btn--ghost" @click="clearPrintQueue">Tozalash</button>
         <button class="qi__btn qi__btn--print" @click="doPrint">
           <AppIcon name="printer" :size="15" /> Chop etish
         </button>
       </div>
-    </div>
-
-    <!-- Yorliq o'lchamini sozlash: lenta va printer har xil bo'lgani uchun -->
-    <div v-if="showSize" class="qi__size">
-      <div class="qi__size-row">
-        <label>Kenglik <input type="number" v-model.number="labelW" min="20" max="120" /> mm</label>
-        <label>Balandlik <input type="number" v-model.number="labelH" min="15" max="120" /> mm</label>
-        <button class="qi__btn qi__btn--ghost" @click="printTestLabel">Sinov yorlig'i</button>
-        <button class="qi__btn qi__btn--print" @click="saveLabelSize">Saqlash</button>
-      </div>
-      <p class="qi__size-hint">
-        Yorliq siljib chiqsa: lentadagi bitta yorliqni lineyka bilan o'lchang va shu yerga yozing.
-        Chop etish oynasida <strong>Margins: None</strong>, <strong>Scale: 100</strong> bo'lsin.
-      </p>
     </div>
 
     <!-- Yetkazuvchi -->
@@ -802,7 +807,13 @@ function fmtTime(s) {
 }
 .qi__btn--print:hover { background: #1d4ed8; }
 
+.qi__head-r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
 /* Yorliq o'lchamini sozlash paneli */
+.qi__size--top {
+  margin: 0 0 14px;
+  border: 1px solid #bfdbfe; border-radius: 10px;
+}
 .qi__size {
   margin: -6px 0 12px; padding: 11px 14px;
   background: #fff; border: 1px solid #bfdbfe; border-radius: 0 0 10px 10px;
