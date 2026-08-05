@@ -563,11 +563,13 @@ function fmtTime(s) {
               <td><input v-model="r.color" class="qi__inp" list="qi-colors" placeholder="—" @keydown.enter.prevent="onEnter(i)" /></td>
 
               <td>
-                <input v-model="r.costPrice" type="number" min="0" class="qi__inp qi__inp--num" placeholder="0" @keydown.enter.prevent="onEnter(i)" />
+                <input v-money="{ get: () => r.costPrice, set: v => r.costPrice = v }"
+                       class="qi__inp qi__inp--num" placeholder="0" @keydown.enter.prevent="onEnter(i)" />
               </td>
 
               <td>
-                <input v-model="r.retailPrice" type="number" min="0" class="qi__inp qi__inp--num" placeholder="0" @keydown.enter.prevent="onEnter(i)" />
+                <input v-money="{ get: () => r.retailPrice, set: v => r.retailPrice = v }"
+                       class="qi__inp qi__inp--num" placeholder="0" @keydown.enter.prevent="onEnter(i)" />
                 <div v-if="marginPct(r) !== null" class="qi__margin" :class="{ neg: marginPct(r) < 0 }">
                   {{ marginPct(r) > 0 ? '+' : '' }}{{ marginPct(r) }}%
                 </div>
@@ -658,7 +660,8 @@ function fmtTime(s) {
                         <input v-model="r.country" class="qi__inp" list="qi-countries" placeholder="—" />
                       </label>
                       <label>Optom narx
-                        <input v-model="r.wholesalePrice" type="number" min="0" class="qi__inp qi__inp--num" placeholder="0" />
+                        <input v-money="{ get: () => r.wholesalePrice, set: v => r.wholesalePrice = v }"
+                               class="qi__inp qi__inp--num" placeholder="0" />
                       </label>
                       <label>Minimal zaxira
                         <input v-model="r.minQty" type="number" min="0" class="qi__inp qi__inp--num" placeholder="0" />

@@ -2,8 +2,13 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router/index.js'
 import './assets/main.css'
+import { vMoney } from './composables/useNumberFormat.js'
 
-createApp(App).use(router).mount('#app')
+createApp(App)
+  .use(router)
+  // Pul maydonlarini yozayotgan vaqtda formatlaydi: 4000 → "4 000"
+  .directive('money', vMoney)
+  .mount('#app')
 
 // index.html'dagi boshlang'ich yuklanish ekranini olib tashlash — Vue mount
 // bo'lib, router ham birinchi marshrutini hal qilganidan keyin (ya'ni

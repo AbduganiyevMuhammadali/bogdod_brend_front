@@ -159,9 +159,8 @@ function printReceipt() {
           <div class="pm-field-label" style="margin-top:14px">Skidka (so'm)</div>
           <div class="pm-disc-row">
             <input
-              type="number" min="0" class="pm-disc-inp" placeholder="0"
-              :value="discount"
-              @input="emit('update:discount', Number($event.target.value) || 0)"
+              class="pm-disc-inp" placeholder="0"
+              v-money="{ get: () => discount, set: v => emit('update:discount', Number(v) || 0) }"
             />
             <span class="pm-disc-cur">so'm</span>
           </div>

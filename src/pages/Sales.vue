@@ -590,14 +590,24 @@ async function delCli(id){ if(!confirm("O'chirasizmi?"))return; try{await client
 const barcodeQ  = ref('')
 const barcodeEl = ref(null)
 
-// Bir xil kod ketma-ket ikki marta o'qilib qolmasligi uchun (skanerlar
-// ba'zan bitta skanni ikki marta yuboradi) qisqa muddatli qulf.
+// Skaner tugmasi bosib turilganda kodni to'xtovsiz qayta-qayta yuboradi.
+// Shu sababli bir xil kod uchun qulf qo'yamiz: oxirgi skandan keyin
+// SCAN_LOCK_MS ichida kelgan ayni kod e'tiborsiz qoldiriladi. Har yangi
+// takror qulf muddatini uzaytiradi — tugma qo'yib yuborilgandan keyingina
+// hisob boshlanadi, shunda 5 soniya ushlab tursa ham bir marta qo'shiladi.
+//
+// Boshqa kod kelsa qulf darhol bekor bo'ladi — turli tovarlarni ketma-ket
+// skanerlashga xalaqit qilmaydi.
+const SCAN_LOCK_MS = 1200
 let lastScanCode = ''
 let lastScanAt   = 0
 
 async function resolveScannedBarcode(bc) {
   const now = Date.now()
-  if (bc === lastScanCode && now - lastScanAt < 250) return
+  if (bc === lastScanCode && now - lastScanAt < SCAN_LOCK_MS) {
+    lastScanAt = now      // ushlab turilgan ekan — qulfni uzaytiramiz
+    return
+  }
   lastScanCode = bc
   lastScanAt   = now
 
@@ -957,7 +967,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
               </span>
               <div class="ci-price-edit" @click.stop>
                 <span class="ci-price-lbl">Narx</span>
-                <input class="ci-p-inp" type="number" :value="item.price" @change.stop="setPrice(item,$event.target.value)" title="Bir dona narxini o'zgartirish"/>
+                <input class="ci-p-inp" v-money="{ get: () => item.price, set: v => setPrice(item, v) }" title="Bir dona narxini o'zgartirish" @click.stop/>
                 <span class="ci-price-cur">so'm</span>
               </div>
             </div>
@@ -978,7 +988,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
           </div>
           <div class="cart__disc-ctrl">
             <input v-if="discountMode==='pct'" v-model.number="discountPct" type="number" min="0" max="100" class="disc-inp" placeholder="0"/>
-            <input v-else v-model.number="discount" type="number" min="0" class="disc-inp" placeholder="0"/>
+            <input v-else v-money="{ get: () => discount, set: v => discount = v }" class="disc-inp" placeholder="0"/>
             <span class="disc-cur">{{ discountMode==='pct'?'%':'so\'m' }}</span>
             <button v-if="discount>0" class="disc-x" @click="discount=0;discountPct=0">×</button>
           </div>
@@ -1143,7 +1153,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
                 </span>
                 <div class="ci-price-edit" @click.stop>
                   <span class="ci-price-lbl">Narx</span>
-                  <input class="ci-p-inp" type="number" :value="item.price" @change.stop="setPrice(item,$event.target.value)"/>
+                  <input class="ci-p-inp" v-money="{ get: () => item.price, set: v => setPrice(item, v) }" @click.stop/>
                   <span class="ci-price-cur">so'm</span>
                 </div>
               </div>
@@ -1161,7 +1171,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
             </div>
             <div class="cart__disc-ctrl">
               <input v-if="discountMode==='pct'" v-model.number="discountPct" type="number" min="0" max="100" class="disc-inp" placeholder="0"/>
-              <input v-else v-model.number="discount" type="number" min="0" class="disc-inp" placeholder="0"/>
+              <input v-else v-money="{ get: () => discount, set: v => discount = v }" class="disc-inp" placeholder="0"/>
               <span class="disc-cur">{{ discountMode==='pct'?'%':'so\'m' }}</span>
               <button v-if="discount>0" class="disc-x" @click="discount=0;discountPct=0">×</button>
             </div>
@@ -1523,7 +1533,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
           <label class="mf">
             <span>Summa *</span>
             <div class="ce-amount-wrap">
-              <input v-model="cashEntryForm.amount" type="number" min="0" class="ce-amount-inp" placeholder="0" autofocus/>
+              <input v-money="{ get: () => cashEntryForm.amount, set: v => cashEntryForm.amount = v }" class="ce-amount-inp" placeholder="0" autofocus/>
               <span class="ce-amount-cur">so'm</span>
             </div>
           </label>
@@ -1580,7 +1590,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
           <label class="mf">
             <span>To'lov summasi *</span>
             <div class="ce-amount-wrap">
-              <input v-model="debtForm.amount" type="number" min="0" class="ce-amount-inp" placeholder="0" autofocus/>
+              <input v-money="{ get: () => debtForm.amount, set: v => debtForm.amount = v }" class="ce-amount-inp" placeholder="0" autofocus/>
               <span class="ce-amount-cur">so'm</span>
             </div>
           </label>
