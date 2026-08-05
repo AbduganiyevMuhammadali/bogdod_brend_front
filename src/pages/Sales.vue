@@ -9,6 +9,7 @@ import { productsApi }  from '@/api/products.js'
 import { clientsApi }   from '@/api/clients.js'
 import { purchasesApi } from '@/api/purchases.js'
 import { fileUrl }      from '@/api/http.js'
+import { useGlobalScanner } from '@/composables/useGlobalScanner.js'
 import { beep }         from '@/composables/useBeep.js'
 import { canAdd }       from '@/composables/usePerms.js'
 import { loadStoreSettings } from '@/composables/useStoreSettings.js'
@@ -589,18 +590,33 @@ async function delCli(id){ if(!confirm("O'chirasizmi?"))return; try{await client
 const barcodeQ  = ref('')
 const barcodeEl = ref(null)
 
+// Bir xil kod ketma-ket ikki marta o'qilib qolmasligi uchun (skanerlar
+// ba'zan bitta skanni ikki marta yuboradi) qisqa muddatli qulf.
+let lastScanCode = ''
+let lastScanAt   = 0
+
 async function resolveScannedBarcode(bc) {
+  const now = Date.now()
+  if (bc === lastScanCode && now - lastScanAt < 250) return
+  lastScanCode = bc
+  lastScanAt   = now
+
   try {
     const found = await productsApi.getByBarcode(bc)
     if (found && Number(found.qty) > 0) {
       const idx = products.value.findIndex(p => p.id === found.id)
-      addToCart(found, idx >= 0 ? idx : 0)
+      addToCart(found, idx >= 0 ? idx : 0)   // ovoz addToCart ichida
     } else if (found) {
+      beep('error')
       flashErr(`${found.name}: zaxira tugagan`)
     } else {
+      beep('error')
       flashErr(`Tovar topilmadi: ${bc}`)
     }
-  } catch { /* ignore */ }
+  } catch {
+    beep('error')
+    flashErr('Serverga ulanib bo\'lmadi')
+  }
 }
 
 async function onBarcodeScan() {
@@ -612,11 +628,28 @@ async function onBarcodeScan() {
   barcodeEl.value?.focus()
 }
 
+
 // ── Mobile: camera barcode scanner ────────────────────────────────────
 const showCameraScanner = ref(false)
 async function onCameraDetected(code) {
   await resolveScannedBarcode(code)
 }
+
+// Skanerni butun sahifa bo'ylab tinglaymiz — kassir input maydonini
+// bosmasdan ham skanerlashi mumkin. Topilgan tovar savatga o'zi tushadi;
+// ayni tovar qayta urilsa addToCart() uning sonini oshiradi.
+useGlobalScanner(
+  async (code) => {
+    // Skaner belgilarni input maydoniga ham yozgan bo'lishi mumkin —
+    // ikki marta ishlamasligi uchun tozalaymiz
+    barcodeQ.value = ''
+    await resolveScannedBarcode(code)
+  },
+  {
+    // Faqat sotuv rejimida, modal oynalar yopiq bo'lganda
+    enabled: () => mode.value === 'pos' && !showPayModal.value && !showCameraScanner.value,
+  }
+)
 
 // cart item stock warning
 function cartItemOverStock(item) {
