@@ -251,20 +251,35 @@ function clearPrintQueue() {
 const showSize = ref(false)
 const labelW = ref(getLabelSize().w)
 const labelH = ref(getLabelSize().h)
+// Printer qog'ozni bir oz siljitib tortadi. Ilgari buni chop etish
+// oynasidan qo'lda ("Поля", "Масштаб") tuzatishga to'g'ri kelardi —
+// endi bir marta shu yerda sozlanadi va hamma yorliqqa qo'llanadi.
+const labelX = ref(getLabelSize().x)
+const labelY = ref(getLabelSize().y)
 
 function saveLabelSize() {
-  setLabelSize(Number(labelW.value), Number(labelH.value))
+  setLabelSize(Number(labelW.value), Number(labelH.value), Number(labelX.value), Number(labelY.value))
   showToast(`Yorliq o'lchami: ${labelW.value}×${labelH.value} mm`, 'ok')
 }
 
+// Sinov yorlig'i eng yomon holatni ko'rsatadi — uzun nom 2 qatorga
+// chiqqanda ham hech narsa kesilmasligini shu yerda tekshirasiz.
 function printTestLabel() {
   saveLabelSize()
-  printLabels58x40([{
-    name: 'SINOV — chetlarni tekshiring',
-    price: 199000,
-    barcode: genBarcode(),
-    qty: 1,
-  }])
+  printLabels58x40([
+    {
+      name: 'SINOV — chetlarni tekshiring',
+      price: 199000,
+      barcode: genBarcode(),
+      qty: 1,
+    },
+    {
+      name: 'Stefano Ricci Finka M To\'q ko\'k — uzun nom sinovi',
+      price: 225000,
+      barcode: genBarcode(),
+      qty: 1,
+    },
+  ])
 }
 
 // ── Tarix ───────────────────────────────────────────────────────────────
@@ -298,7 +313,8 @@ async function openDoc(id) {
   openDocId.value = id
   try {
     const doc = await purchasesApi.getById(id)
-    openDocItems.value = (doc.items || []).filter(i => i.barcode)
+    // Shtrix-kodsizlari ham ko'rinadi — narxini tahrirlash kerak bo'lishi mumkin
+    openDocItems.value = doc.items || []
   } catch {
     showToast('Hujjatni ochib bo\'lmadi', 'err')
     openDocId.value = null
@@ -327,6 +343,60 @@ async function printDoc(id, perItem = true) {
   } finally {
     docBusy.value = false
   }
+}
+
+// ── Tarixdagi narxlarni tahrirlash ──────────────────────────────────────
+// Tezkor kiritishda tannarx ko'pincha "keyin kiritamiz" deb bo'sh qoldiriladi.
+// Shu sabab saqlangandan keyin ham tannarx va sotuv narxini shu yerdan
+// to'g'rilash mumkin — backend shu partiyadan sotilganlarning tannarxini ham
+// yangilaydi, shunda foyda hisoboti to'g'ri chiqadi.
+const editItemId  = ref(null)
+const editCost    = ref('')
+const editRetail  = ref('')
+const editBusy    = ref(false)
+
+function startEdit(item) {
+  editItemId.value = item.id
+  editCost.value   = item.costPrice      || ''
+  editRetail.value = item.retailPriceSum || ''
+}
+function cancelEdit() {
+  editItemId.value = null
+  editCost.value = ''
+  editRetail.value = ''
+}
+
+async function saveEdit(item) {
+  const cost   = Number(editCost.value)   || 0
+  const retail = Number(editRetail.value) || 0
+  if (cost < 0 || retail < 0) { showToast('Narx manfiy bo\'la olmaydi', 'err'); return }
+
+  editBusy.value = true
+  try {
+    const updated = await purchasesApi.updateItemPrices(openDocId.value, item.id, {
+      costPrice:   cost,
+      retailPrice: retail,
+    })
+    // Jadvalni qayta yuklamasdan joyida yangilaymiz
+    Object.assign(item, {
+      costPrice:      updated.costPrice,
+      retailPriceSum: updated.retailPriceSum,
+      totalSum:       updated.totalSum,
+    })
+    cancelEdit()
+    showToast('Narx yangilandi', 'ok')
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'Narxni saqlab bo\'lmadi', 'err')
+  } finally {
+    editBusy.value = false
+  }
+}
+
+// Qatordagi foyda foizi — tannarx kiritilganini ko'z bilan tekshirish uchun
+function itemMargin(it) {
+  const c = Number(it.costPrice) || 0, s = Number(it.retailPriceSum) || 0
+  if (!c || !s) return null
+  return Math.round(((s - c) / c) * 100)
 }
 
 function printOneFromDoc(item) {
@@ -389,12 +459,23 @@ function fmtTime(s) {
       <div class="qi__size-row">
         <label>Kenglik <input type="number" v-model.number="labelW" min="20" max="120" /> mm</label>
         <label>Balandlik <input type="number" v-model.number="labelH" min="15" max="120" /> mm</label>
+        <label title="Manfiy — chapga, musbat — o'ngga suradi">
+          Gorizontal siljish <input type="number" v-model.number="labelX" min="-15" max="15" step="0.5" /> mm
+        </label>
+        <label title="Manfiy — yuqoriga, musbat — pastga suradi">
+          Vertikal siljish <input type="number" v-model.number="labelY" min="-15" max="15" step="0.5" /> mm
+        </label>
         <button class="qi__btn qi__btn--ghost" @click="printTestLabel">Sinov yorlig'i</button>
         <button class="qi__btn qi__btn--print" @click="saveLabelSize">Saqlash</button>
       </div>
       <p class="qi__size-hint">
         Lentadagi bitta yorliqni lineyka bilan o'lchang va shu yerga yozing.
-        Chop etish oynasida <strong>Margins: None</strong>, <strong>Scale: 100</strong> bo'lsin.
+        Chop etish oynasida <strong>Margins: None</strong>, <strong>Scale: 100</strong> bo'lsin —
+        masshtabni 98% qilish shart emas.
+        <br />
+        Yozuv chetga surilib chiqsa, <strong>siljish</strong> maydonlaridan to'g'rilang:
+        chapga surish uchun manfiy qiymat (masalan <strong>−6</strong>), yuqoriga surish uchun ham manfiy.
+        Sinov yorlig'i ikkita bo'lib chiqadi — ikkinchisi uzun nomli, shuni tekshiring.
       </p>
     </div>
 
@@ -414,7 +495,7 @@ function fmtTime(s) {
       <div class="qi__hist-head">
         <p class="qi__hist-note">
           Har bir saqlash alohida yozuv bo'lib qoladi. Istalgan vaqtda ochib,
-          shtrix-kod yorliqlarini qayta chop etishingiz mumkin.
+          yorliqlarni qayta chop etish yoki tannarx / sotuv narxini to'g'rilash mumkin.
         </p>
         <button class="qi__btn qi__btn--ghost" :disabled="historyBusy" @click="loadHistory">
           <AppIcon name="refresh-cw" :size="13" /> Yangilash
@@ -450,23 +531,79 @@ function fmtTime(s) {
             <div v-if="docBusy" class="qi__empty qi__empty--sm">Yuklanmoqda...</div>
             <table v-else-if="openDocItems.length" class="qi__hitems-tbl">
               <thead>
-                <tr><th>Mahsulot</th><th class="ta-r">Narx</th><th class="ta-c">Soni</th><th>Shtrix-kod</th><th></th></tr>
+                <tr>
+                  <th>Mahsulot</th>
+                  <th class="ta-r">Tannarx</th>
+                  <th class="ta-r">Sotuv narxi</th>
+                  <th class="ta-c">Soni</th>
+                  <th>Shtrix-kod</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
-                <tr v-for="it in openDocItems" :key="it.id">
+                <tr v-for="it in openDocItems" :key="it.id" :class="{ 'is-edit': editItemId === it.id }">
                   <td>{{ it.productName }}</td>
-                  <td class="ta-r">{{ fmt(it.retailPriceSum) }}</td>
+
+                  <!-- Tannarx: bo'sh qolgan bo'lsa ko'zga tashlanadi -->
+                  <td class="ta-r">
+                    <input
+                      v-if="editItemId === it.id"
+                      v-money="{ get: () => editCost, set: v => editCost = v }"
+                      class="qi__inp qi__inp--num qi__inp--sm"
+                      placeholder="0"
+                      @keydown.enter.prevent="saveEdit(it)"
+                      @keydown.esc="cancelEdit()"
+                    />
+                    <span v-else-if="Number(it.costPrice) > 0">{{ fmt(it.costPrice) }}</span>
+                    <span v-else class="qi__nocost" title="Tannarx kiritilmagan">kiritilmagan</span>
+                  </td>
+
+                  <td class="ta-r">
+                    <input
+                      v-if="editItemId === it.id"
+                      v-money="{ get: () => editRetail, set: v => editRetail = v }"
+                      class="qi__inp qi__inp--num qi__inp--sm"
+                      placeholder="0"
+                      @keydown.enter.prevent="saveEdit(it)"
+                      @keydown.esc="cancelEdit()"
+                    />
+                    <template v-else>
+                      {{ fmt(it.retailPriceSum) }}
+                      <span v-if="itemMargin(it) !== null" class="qi__hmargin" :class="{ neg: itemMargin(it) < 0 }">
+                        {{ itemMargin(it) > 0 ? '+' : '' }}{{ itemMargin(it) }}%
+                      </span>
+                    </template>
+                  </td>
+
                   <td class="ta-c">{{ Math.round(Number(it.unitQty) || 0) }}</td>
                   <td class="qi__hbc">{{ it.barcode }}</td>
-                  <td class="ta-r">
-                    <button class="qi__mini qi__mini--copy" title="Shu mahsulot yorlig'i" @click="printOneFromDoc(it)">
-                      <AppIcon name="printer" :size="11" />
-                    </button>
+
+                  <td class="ta-r qi__hact">
+                    <template v-if="editItemId === it.id">
+                      <button class="qi__mini qi__mini--ok" title="Saqlash" :disabled="editBusy" @click="saveEdit(it)">
+                        <AppIcon name="check" :size="11" />
+                      </button>
+                      <button class="qi__mini qi__mini--del" title="Bekor qilish" :disabled="editBusy" @click="cancelEdit()">
+                        <AppIcon name="x" :size="11" />
+                      </button>
+                    </template>
+                    <template v-else>
+                      <button class="qi__mini qi__mini--copy" title="Narxlarni tahrirlash" @click="startEdit(it)">
+                        <AppIcon name="edit-2" :size="11" />
+                      </button>
+                      <button
+                        v-if="it.barcode"
+                        class="qi__mini" title="Shu mahsulot yorlig'i"
+                        @click="printOneFromDoc(it)"
+                      >
+                        <AppIcon name="printer" :size="11" />
+                      </button>
+                    </template>
                   </td>
                 </tr>
               </tbody>
             </table>
-            <div v-else class="qi__empty qi__empty--sm">Shtrix-kodli mahsulot topilmadi.</div>
+            <div v-else class="qi__empty qi__empty--sm">Bu hujjatda mahsulot yo'q.</div>
           </div>
         </div>
       </div>
@@ -789,6 +926,21 @@ function fmtTime(s) {
 .qi__hbc { font-size: 11.5px; color: #64748b; font-variant-numeric: tabular-nums; }
 .ta-r { text-align: right; }
 .ta-c { text-align: center; }
+
+/* Tarixdagi narx tahriri */
+.qi__hitems-tbl tr.is-edit td { background: #faf5ff; }
+.qi__hitems-tbl .qi__inp--sm { display: inline-block; width: 100px; height: 27px; }
+.qi__nocost {
+  padding: 1px 7px; border-radius: 5px; background: #fef3c7;
+  font-size: 11px; color: #b45309;
+}
+.qi__hmargin { margin-left: 5px; font-size: 10.5px; font-weight: 600; color: #059669; }
+.qi__hmargin.neg { color: #dc2626; }
+.qi__hact { white-space: nowrap; }
+.qi__hact .qi__mini + .qi__mini { margin-left: 3px; }
+.qi__mini--ok { border-color: #a7f3d0; background: #ecfdf5; color: #047857; }
+.qi__mini--ok:hover { background: #d1fae5; color: #065f46; }
+.qi__mini:disabled { opacity: .5; cursor: default; }
 
 /* Yorliq chop etish paneli */
 .qi__print {

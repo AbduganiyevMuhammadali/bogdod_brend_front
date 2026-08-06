@@ -124,6 +124,15 @@ export const purchasesApi = {
   async remove(id) {
     await http.delete(`/purchases/${id}`)
   },
+  // Saqlangan hujjat qatoridagi tannarx / sotuv narxini keyinchalik to'g'rilash.
+  // prices: { costPrice?, retailPrice? } — faqat yuborilgani o'zgaradi.
+  async updateItemPrices(purchaseId, itemId, prices = {}) {
+    const body = {}
+    if (prices.costPrice   !== undefined) body.cost_price       = Number(prices.costPrice)   || 0
+    if (prices.retailPrice !== undefined) body.retail_price_sum = Number(prices.retailPrice) || 0
+    const res = await http.patch(`/purchases/${purchaseId}/items/${itemId}/prices`, body)
+    return itemToFront(res.data)
+  },
   async getFifoPrices() {
     const res = await http.get('/purchases/fifo-prices')
     const map = {}

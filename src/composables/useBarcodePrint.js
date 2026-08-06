@@ -113,18 +113,31 @@ export function printBarcodeLabels(items) {
 const DEFAULT_W_MM = 58
 const DEFAULT_H_MM = 40
 
+// Printerlar qog'ozni bir oz siljitib tortadi va chetiga bosa olmaydi.
+// Shuni brauzerning chop etish oynasida har safar qo'lda ("Поля", "Масштаб")
+// tuzatish o'rniga shu yerda saqlaymiz — bir marta sozlanadi va hamma
+// yorliqqa o'zi qo'llanadi.
+const DEFAULT_SHIFT_X_MM = 0   // musbat — o'ngga, manfiy — chapga
+const DEFAULT_SHIFT_Y_MM = 0   // musbat — pastga, manfiy — yuqoriga
+
 export function getLabelSize() {
   const w = Number(localStorage.getItem('label_w_mm'))
   const h = Number(localStorage.getItem('label_h_mm'))
+  const x = Number(localStorage.getItem('label_shift_x_mm'))
+  const y = Number(localStorage.getItem('label_shift_y_mm'))
   return {
     w: w > 0 ? w : DEFAULT_W_MM,
     h: h > 0 ? h : DEFAULT_H_MM,
+    x: Number.isFinite(x) ? x : DEFAULT_SHIFT_X_MM,
+    y: Number.isFinite(y) ? y : DEFAULT_SHIFT_Y_MM,
   }
 }
 
-export function setLabelSize(w, h) {
+export function setLabelSize(w, h, x, y) {
   if (Number(w) > 0) localStorage.setItem('label_w_mm', String(w))
   if (Number(h) > 0) localStorage.setItem('label_h_mm', String(h))
+  if (x !== undefined && Number.isFinite(Number(x))) localStorage.setItem('label_shift_x_mm', String(Number(x)))
+  if (y !== undefined && Number.isFinite(Number(y))) localStorage.setItem('label_shift_y_mm', String(Number(y)))
 }
 
 function labelHtml58x40(item) {
@@ -145,13 +158,21 @@ function labelHtml58x40(item) {
     ? `<div class="lb__price">${fmt(price)} so'm</div>`
     : ''
 
+  // Uzun nomni kichraytiramiz. Ilgari o'lcham qat'iy edi va "Stefano Ricci
+  // Finka M To'q ko'k" kabi nomlar 2 qatorga chiqib, yorliqdan toshib
+  // ketardi. Endi nom uzunligiga qarab sinf beriladi — sig'maydigan holat
+  // umuman yuzaga kelmaydi.
+  const nameClass = name.length > 42 ? 'lb__name--xs'
+                  : name.length > 26 ? 'lb__name--sm'
+                  : ''
+
   return `
-    <div class="lb">
-      <div class="lb__name">${escapeHtml(name)}</div>
+    <div class="lb"><div class="lb__in">
+      <div class="lb__name ${nameClass}">${escapeHtml(name)}</div>
       ${priceHtml}
       <img class="lb__bc" src="${png}" />
       <div class="lb__code">${escapeHtml(item.barcode)}</div>
-    </div>`
+    </div></div>`
 }
 
 function escapeHtml(s) {
@@ -168,7 +189,7 @@ export function printLabels58x40(items) {
   const list = (items || []).filter(i => i && i.barcode)
   if (!list.length) return false
 
-  const { w: LABEL_W_MM, h: LABEL_H_MM } = getLabelSize()
+  const { w: LABEL_W_MM, h: LABEL_H_MM, x: SHIFT_X_MM, y: SHIFT_Y_MM } = getLabelSize()
 
   const labels = list
     .flatMap(i => Array.from({ length: Math.max(1, Number(i.qty) || 1) }, () => labelHtml58x40(i)))
@@ -190,21 +211,38 @@ export function printLabels58x40(items) {
     .lb {
       width: ${LABEL_W_MM}mm;
       height: ${LABEL_H_MM}mm;
-      /* Termal printerlar chetlarga bosa olmaydi — 2mm hoshiya qoldiramiz */
-      padding: 2mm;
       background: #fff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1mm;
       overflow: hidden;
       page-break-after: always;
       break-after: page;
       page-break-inside: avoid;
       break-inside: avoid;
+      /* Printer siljishini shu yerda tuzatamiz — chop etish oynasida
+         "Поля" va "Масштаб" ni qo'lda o'zgartirish shart emas */
+      position: relative;
     }
     .lb:last-child { page-break-after: auto; break-after: auto; }
+
+    /* Ichki qatlam — hoshiya va siljish shu yerda. Tashqi .lb aynan
+       sahifa o'lchamida qoladi, shuning uchun siljitsak ham yorliqlar
+       bir-biriga surilib ketmaydi. */
+    .lb__in {
+      position: absolute;
+      left: ${SHIFT_X_MM}mm;
+      top: ${SHIFT_Y_MM}mm;
+      width: ${LABEL_W_MM}mm;
+      height: ${LABEL_H_MM}mm;
+      /* Termal printerlar chetlarga bosa olmaydi — hoshiya qoldiramiz */
+      padding: 1.5mm 2mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      /* center emas — space-between. Markazlashtirilganda kontent
+         balandlikdan oshsa yuqoridan ham kesilardi (nomning tepasi
+         qirqilib qolardi). Bunda esa yuqoridan boshlanadi. */
+      justify-content: space-between;
+      overflow: hidden;
+    }
 
     .lb__name {
       width: 100%;
@@ -218,25 +256,35 @@ export function printLabels58x40(items) {
       -webkit-box-orient: vertical;
       overflow: hidden;
       word-break: break-word;
-      max-height: 6.7mm;
-      flex-shrink: 0;
+      /* Aynan 2 qator × 1.15 line-height — kasr qoldiq kesilmasin */
+      height: 6.7mm;
+      flex: 0 0 auto;
     }
+    /* Uzun nomlar uchun kichikroq shrift — 2 qatorga baribir sig'adi */
+    .lb__name--sm { font-size: 2.6mm; height: 6mm; }
+    .lb__name--xs { font-size: 2.3mm; height: 5.3mm; }
+
     .lb__price {
       font-size: 5.2mm;
       font-weight: 900;
-      line-height: 1.05;
+      line-height: 1.1;
       color: #000;
       white-space: nowrap;
-      flex-shrink: 0;
+      /* Juda uzun narx ham yorliqdan chiqmasin */
+      max-width: 100%;
+      overflow: hidden;
+      flex: 0 0 auto;
     }
     .lb__bc {
       width: 100%;
-      max-width: 52mm;
-      height: 14mm;
+      /* Qolgan bo'sh joyni shtrix-kod egallaydi: nom 1 qatormi yoki
+         2 qatormi — pastdagi kod raqami har doim bir joyda turadi */
+      flex: 1 1 auto;
+      min-height: 9mm;
+      max-height: 15mm;
       /* fill emas — nisbat buzilmasin, skaner o'qishi shunga bog'liq */
       object-fit: contain;
       display: block;
-      flex-shrink: 0;
     }
     .lb__code {
       font-size: 2.9mm;
@@ -244,7 +292,7 @@ export function printLabels58x40(items) {
       letter-spacing: .3mm;
       line-height: 1;
       font-variant-numeric: tabular-nums;
-      flex-shrink: 0;
+      flex: 0 0 auto;
     }
 
     /* Ekranda ko'rish uchun — chop etishda yo'qoladi */
@@ -255,6 +303,9 @@ export function printLabels58x40(items) {
         display: flex; flex-direction: column; align-items: center; gap: 10px;
       }
       .lb { border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+      /* Siljish faqat printer uchun — ekranda yorliq qanday
+         terilganini toza ko'rish kerak */
+      .lb__in { left: 0; top: 0; }
     }
     @media print {
       html, body { background: #fff; }
