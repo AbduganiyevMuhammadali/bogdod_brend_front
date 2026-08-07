@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { reportsApi } from '@/api/reports.js'
-import { todayKey } from '@/composables/useDateTime.js'
+import { todayKey, fmtDateTime as fmtDate } from '@/composables/useDateTime.js'
 
 // ── Tabs ─────────────────────────────────────────────────────────
 const TABS = [
@@ -165,10 +165,7 @@ function toUSD(v) {
 
 // ── Helpers ───────────────────────────────────────────────────────
 function fmt(v) { return new Intl.NumberFormat('uz-UZ').format(Math.round(Number(v) || 0)) }
-function fmtDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleString('uz-UZ', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
-}
+// fmtDate = sana + soat, useDateTime.js dagi umumiy funksiya orqali
 
 const PAY_COLORS = { 'Naqd': '#10b981', 'Karta': '#6366f1', "O'tkazma": '#f59e0b', 'Qarz': '#ef4444' }
 

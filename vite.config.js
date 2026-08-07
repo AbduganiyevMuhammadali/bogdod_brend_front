@@ -36,9 +36,21 @@ function capacitorOptional() {
   }
 }
 
+// Backend `beckend/dist/` papkasini statik fayl sifatida uzatadi
+// (startup/routes.js). Ilgari build `frontend/dist/` ga tushardi va uni
+// qo'lda ko'chirish kerak bo'lardi — esdan chiqsa, serverda eski sahifa
+// qolib ketardi. Endi build to'g'ridan-to'g'ri o'sha papkaga yoziladi.
+// Boshqa joyga kerak bo'lsa: BUILD_OUT_DIR=... npm run build
+const OUT_DIR = process.env.BUILD_OUT_DIR
+  || fileURLToPath(new URL('../beckend/dist', import.meta.url))
+
 export default defineConfig({
   define: {
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
+  build: {
+    outDir: OUT_DIR,
+    emptyOutDir: true,
   },
   plugins: [capacitorOptional(), vue()],
   resolve: {
