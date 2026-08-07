@@ -133,8 +133,11 @@ export const purchasesApi = {
     const res = await http.patch(`/purchases/${purchaseId}/items/${itemId}/prices`, body)
     return itemToFront(res.data)
   },
-  async getFifoPrices() {
-    const res = await http.get('/purchases/fifo-prices')
+  // ids berilsa faqat o'sha mahsulotlar uchun hisoblanadi — sotuv sahifasi
+  // ekranda ko'rinayotgan tovarlarnigina so'raydi, butun bazani emas.
+  async getFifoPrices(ids = null) {
+    const params = (Array.isArray(ids) && ids.length) ? { ids: ids.join(',') } : {}
+    const res = await http.get('/purchases/fifo-prices', { params })
     const map = {}
     res.data.forEach(b => {
       map[b.product_id] = {

@@ -56,20 +56,40 @@ let   searchTimer   = null
 
 const showOutOfStock = ref(false)
 
+// Ketma-ket so'rov yuborilganda oxirgisining javobi kelishi kafolatlanmaydi
+// (tez yozilgan qidiruvda eski javob keyin kelib, ro'yxatni buzishi mumkin).
+// Har chaqiruvga raqam beramiz va faqat eng oxirgisini qabul qilamiz.
+let loadSeq = 0
+
 async function loadProducts(q = '') {
+  const seq = ++loadSeq
   prodLoading.value = true
   try {
     const params = { limit: 200 }
     if (q.trim()) params.search = q.trim()
     if (activeCategory.value !== 'all') params.category = activeCategory.value
 
-    const [res, fifoMap] = await Promise.all([
-      productsApi.getAll(params),
-      purchasesApi.getFifoPrices().catch(() => ({})),
-    ])
+    const res = await productsApi.getAll(params)
+    if (seq !== loadSeq) return          // eskirgan javob — tashlab yuboramiz
 
-    // Override retail/wholesale price with oldest available batch price (FIFO)
-    const data = res.data.map(p => {
+    const data = showOutOfStock.value
+      ? res.data
+      : res.data.filter(p => Number(p.qty) > 0)
+
+    // Mahsulotlarni darhol ko'rsatamiz — narxlar keyin aniqlashtiriladi.
+    // Shunda ekran FIFO so'rovini kutib turmaydi.
+    products.value = data
+
+    // FIFO narxi faqat ekranda turgan tovarlar uchun so'raladi. Ilgari
+    // butun bazadagi partiyalar tortilardi va mahsulot ko'paygan sari
+    // sotuv sahifasi sekinlashardi.
+    if (!data.length) return
+    const fifoMap = await purchasesApi
+      .getFifoPrices(data.map(p => p.id))
+      .catch(() => ({}))
+    if (seq !== loadSeq) return
+
+    products.value = data.map(p => {
       const fifo = fifoMap[p.id]
       if (!fifo) return p
       return {
@@ -78,12 +98,11 @@ async function loadProducts(q = '') {
         wholesalePrice: fifo.wholesalePrice || p.wholesalePrice,
       }
     })
-
-    products.value = showOutOfStock.value
-      ? data
-      : data.filter(p => Number(p.qty) > 0)
-  } catch { products.value = [] }
-  finally { prodLoading.value = false }
+  } catch {
+    if (seq === loadSeq) products.value = []
+  } finally {
+    if (seq === loadSeq) prodLoading.value = false
+  }
 }
 
 watch(showOutOfStock, () => loadProducts(searchQ.value))
@@ -95,7 +114,9 @@ async function loadCategories() {
   } catch { categories.value = [] }
 }
 
-watch(searchQ, v => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadProducts(v), 200) })
+// 300ms — tez yozganda har harf uchun so'rov ketmasin. Skanerga ta'sir
+// qilmaydi: u alohida maydondan (barcodeQ) getByBarcode orqali ishlaydi.
+watch(searchQ, v => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadProducts(v), 300) })
 watch(activeCategory, () => loadProducts(searchQ.value))
 
 // Color palette for product cards
