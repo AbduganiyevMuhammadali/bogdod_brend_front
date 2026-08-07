@@ -13,6 +13,7 @@ import { useGlobalScanner } from '@/composables/useGlobalScanner.js'
 import { beep }         from '@/composables/useBeep.js'
 import { canAdd }       from '@/composables/usePerms.js'
 import { loadStoreSettings } from '@/composables/useStoreSettings.js'
+import { fmtDate, fmtTime, fmtDateTime, todayKey } from '@/composables/useDateTime.js'
 
 const route  = useRoute()
 const router = useRouter()
@@ -357,8 +358,8 @@ function exportHistoryCSV() {
   const cols=['Doc №','Sana','Vaqt','Mijoz','To\'lov','Mahsulotlar','Jami summa','Chegirma','To\'langan','Qarz','Holat']
   const rows=history.value.map(s=>[
     `#${String(s.docNumber).padStart(5,'0')}`,
-    s.date?.slice(0,10).split('-').reverse().join('.') ?? '',
-    s.date?.slice(11,16) ?? '',
+    fmtDate(s.date, ''),
+    fmtTime(s.date),
     s.client?.name ?? 'Anonim',
     s.paymentType,
     s.itemCount,
@@ -372,7 +373,7 @@ function exportHistoryCSV() {
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'})
   const url=URL.createObjectURL(blob)
   const a=document.createElement('a'); a.href=url
-  a.download=`sotuv-tarixi-${new Date().toISOString().slice(0,10)}.csv`
+  a.download=`sotuv-tarixi-${todayKey()}.csv`
   a.click(); URL.revokeObjectURL(url)
 }
 
@@ -393,17 +394,12 @@ async function cancelSale(id) {
     if(saleModal.value?.id===id) saleModal.value={...saleModal.value,status:'cancelled'}
   } catch(e) { alert(e.response?.data?.message??'Xatolik') }
 }
-function fmtDateTime(d) {
-  if(!d) return '—'
-  const dt=new Date(d)
-  return dt.toLocaleDateString('uz-UZ',{day:'2-digit',month:'2-digit',year:'numeric'})
-    + ' ' + dt.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'})
-}
+// fmtDateTime endi useDateTime.js dan keladi — hamma sahifada bir xil
 
 // ── Cash report ─────────────────────────────────────────────────────
 const cashRep=ref(null); const cashLoad=ref(false)
-const cashFrom=ref(new Date().toISOString().slice(0,10))
-const cashTo=ref(new Date().toISOString().slice(0,10))
+const cashFrom=ref(todayKey())
+const cashTo=ref(todayKey())
 async function loadCash() {
   cashLoad.value=true
   try { cashRep.value=await salesApi.getCashReport({date_from:cashFrom.value,date_to:cashTo.value}) }
@@ -1258,8 +1254,8 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
           >
             <td><span class="doc-num">#{{ String(s.docNumber).padStart(5,'0') }}</span></td>
             <td>
-              <div class="c-dim" style="font-size:12.5px;font-weight:500;color:#374151">{{ s.date?.slice(0,10).split('-').reverse().join('.') }}</div>
-              <div class="c-dim" style="font-size:11px;margin-top:1px">{{ s.date?.slice(11,16) }}</div>
+              <div class="c-dim" style="font-size:12.5px;font-weight:500;color:#374151">{{ fmtDate(s.date) }}</div>
+              <div class="c-dim" style="font-size:11px;margin-top:1px">{{ fmtTime(s.date) }}</div>
             </td>
             <td>
               <div v-if="s.client?.name" class="hist-client">
@@ -1384,8 +1380,8 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
               @click="onCashRowClick(t)"
             >
               <td>
-                <div style="font-size:12.5px;color:#374151;font-weight:500">{{ t.date?.slice(0,10).split('-').reverse().join('.') }}</div>
-                <div class="c-dim" style="font-size:11px;margin-top:1px">{{ t.date?.slice(11,16) }}</div>
+                <div style="font-size:12.5px;color:#374151;font-weight:500">{{ fmtDate(t.date) }}</div>
+                <div class="c-dim" style="font-size:11px;margin-top:1px">{{ fmtTime(t.date) }}</div>
               </td>
               <td>
                 <span class="txn-badge" :class="`txn--${t.type}`">{{ TXN_LABELS[t.type] || t.type }}</span>

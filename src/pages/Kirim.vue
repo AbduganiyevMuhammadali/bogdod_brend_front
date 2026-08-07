@@ -7,6 +7,7 @@ import { suppliersApi } from '@/api/suppliers.js'
 import { beep }         from '@/composables/useBeep.js'
 import { canAdd, canEdit } from '@/composables/usePerms.js'
 import { printLabels58x40, genBarcode } from '@/composables/useBarcodePrint.js'
+import { fmtDate, fmtTime, fmtDateTime, todayKey, toDateKey, toInputValue } from '@/composables/useDateTime.js'
 
 const WAREHOUSES = ['Asosiy ombor', '2-filial', '3-filial']
 
@@ -39,10 +40,10 @@ watch(search, () => { clearTimeout(st); st = setTimeout(loadDocs, 300) })
 
 const stats = computed(() => {
   const active = docs.value.filter(d => d.status !== 'cancelled')
-  const today  = new Date().toISOString().slice(0, 10)
+  const today  = todayKey()
   return {
     total:    docs.value.length,
-    today:    docs.value.filter(d => d.date?.slice(0, 10) === today).length,
+    today:    docs.value.filter(d => toDateKey(d.date) === today).length,
     totalUSD: active.reduce((s, d) => s + d.totalUsd, 0),
     totalSum: active.reduce((s, d) => s + d.totalSum, 0),
   }
@@ -78,7 +79,7 @@ async function openAdd() {
   const nextNum = await purchasesApi.getNextDocNumber().catch(() => 1)
   const firstItem = makeItem()
   Object.assign(form, {
-    docNumber: nextNum, date: new Date().toISOString().slice(0, 16),
+    docNumber: nextNum, date: toInputValue(),
     warehouse: 'Asosiy ombor', supplier: '', supplierId: null,
     expense: 0, discount: 0, exchangeRate: 11000, comment: '', status: 'draft',
     items: [firstItem],
@@ -95,7 +96,7 @@ async function openEdit(id) {
   try {
     const p = await purchasesApi.getById(id)
     Object.assign(form, {
-      docNumber: p.docNumber, date: p.date?.slice(0, 16) ?? '',
+      docNumber: p.docNumber, date: toInputValue(p.date),
       warehouse: p.warehouse, supplier: p.supplier, supplierId: p.supplierId ?? null,
       expense: p.expense, discount: p.discount, exchangeRate: p.exchangeRate,
       comment: p.comment, status: p.status,
@@ -510,7 +511,7 @@ function clampDropX(pos) {
       <table v-else class="ktbl">
         <thead>
           <tr>
-            <th>Hujjat №</th><th>Sana</th><th>Yetkazuvchi</th><th>Ombor</th>
+            <th>Hujjat №</th><th>Sana / vaqt</th><th>Yetkazuvchi</th><th>Ombor</th>
             <th class="ta-c">Tovarlar</th><th class="ta-r">USD</th><th class="ta-r">So'm</th>
             <th>Holat</th><th style="width:110px"></th>
           </tr>
@@ -518,7 +519,10 @@ function clampDropX(pos) {
         <tbody>
           <tr v-for="d in docs" :key="d.id" class="ktbl__row" @click="openEdit(d.id)">
             <td><span class="doc-num">#{{ d.docNumber }}</span></td>
-            <td class="ktbl__date">{{ d.date?.slice(0,10).split('-').reverse().join('.') }}</td>
+            <td class="ktbl__date">
+              {{ fmtDate(d.date) }}
+              <div class="ktbl__time">{{ fmtTime(d.date) }}</div>
+            </td>
             <td>
               <span class="ktbl__supplier">{{ d.supplier || '—' }}</span>
               <!-- Yetkazuvchisiz hujjatlarni ajratish uchun izohni ko'rsatamiz
@@ -555,7 +559,7 @@ function clampDropX(pos) {
           </div>
           <p class="kdoc-card__supplier">{{ d.supplier || '—' }}</p>
           <div class="kdoc-card__rows">
-            <div class="kdoc-card__row"><span class="kdoc-card__lbl">Sana</span><span class="kdoc-card__val">{{ d.date?.slice(0,10).split('-').reverse().join('.') }}</span></div>
+            <div class="kdoc-card__row"><span class="kdoc-card__lbl">Sana</span><span class="kdoc-card__val">{{ fmtDateTime(d.date) }}</span></div>
             <div class="kdoc-card__row"><span class="kdoc-card__lbl">Ombor</span><span class="wh-tag">{{ d.warehouse }}</span></div>
             <div class="kdoc-card__row"><span class="kdoc-card__lbl">Tovarlar</span><span class="items-badge">{{ d.itemCount }} ta</span></div>
           </div>
@@ -1143,7 +1147,8 @@ function clampDropX(pos) {
 .ktbl__row:hover td { background: var(--indigo-50); }
 .ktbl__row td { padding: 11px 12px; font-size: 13px; vertical-align: middle; }
 .doc-num { font-family: monospace; font-weight: 800; color: var(--indigo-600); background: var(--indigo-50); padding: 2px 8px; border-radius: var(--r-xs); }
-.ktbl__date { color: var(--color-text-2); font-size: 12.5px; }
+.ktbl__date { color: var(--color-text-2); font-size: 12.5px; white-space: nowrap; }
+.ktbl__time { margin-top: 1px; font-size: 11px; color: var(--color-text-3, #94a3b8); font-variant-numeric: tabular-nums; }
 .ktbl__supplier { font-weight: 600; color: var(--color-text); }
 .ktbl__note {
   display: block; margin-top: 2px;

@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { reportsApi } from '@/api/reports.js'
+import { todayKey } from './useDateTime.js'
 
 export function useDashboard() {
   const loading  = ref(false)
@@ -12,7 +13,7 @@ export function useDashboard() {
   async function fetchDashboard() {
     loading.value = true
     error.value   = null
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayKey()
     try {
       const [ov, prod, cash, prof] = await Promise.all([
         reportsApi.getOverview(),

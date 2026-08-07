@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { toDateKey } from './useDateTime.js'
 
 const TAX_RATE = 0.12
 
@@ -156,7 +157,7 @@ function processPayment(method, tendered) {
   const now = new Date()
   const receipt = {
     id:       `ORD-${orderCounter++}`,
-    date:     now.toISOString().slice(0, 10),
+    date:     toDateKey(now),
     time:     now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
     cashier:  'Muhammadali',
     customer: selectedCustomer.value,

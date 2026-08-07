@@ -7,6 +7,7 @@ import { productsApi }  from '@/api/products.js'
 import { clientsApi }   from '@/api/clients.js'
 import { suppliersApi } from '@/api/suppliers.js'
 import { purchasesApi } from '@/api/purchases.js'
+import { fmtDate } from '@/composables/useDateTime.js'
 
 const router = useRouter()
 
@@ -223,7 +224,7 @@ function flatIndexOf(groupKey, item) {
                   <span class="gs-row-ico gs-row-ico--green"><AppIcon name="download" :size="14"/></span>
                   <span class="gs-row-main">
                     <span class="gs-row-name">#{{ d.docNumber }} — {{ d.supplier || 'Yetkazuvchisiz' }}</span>
-                    <span class="gs-row-sub">{{ d.date?.slice(0,10).split('-').reverse().join('.') }} · {{ d.warehouse }}</span>
+                    <span class="gs-row-sub">{{ fmtDate(d.date) }} · {{ d.warehouse }}</span>
                   </span>
                   <span class="gs-st" :class="STATUS_MAP[d.status]?.cls">{{ STATUS_MAP[d.status]?.label }}</span>
                   <span class="gs-row-val">{{ fmt(d.totalSum) }} so'm</span>

@@ -10,6 +10,7 @@ const categories = ref([])
 const loading    = ref(false)
 const saving     = ref(false)
 const error      = ref('')
+const totalCount = ref(0)   // serverdagi jami soni
 
 const search    = ref('')
 const filterCat = ref('all')
@@ -25,8 +26,11 @@ async function loadProducts() {
     if (filterCat.value !== 'all') params.category = filterCat.value
     if (search.value.trim())       params.search    = search.value.trim()
 
-    const res = await productsApi.getAll(params)
+    // limit=0 — hammasini qaytaradi. Ilgari backend 200 ta bilan
+    // cheklab qo'yardi va qolgan mahsulotlar ro'yxatda ko'rinmasdi.
+    const res = await productsApi.getAll({ ...params, limit: 0 })
     products.value = res.data
+    totalCount.value = res.total ?? res.data.length
   } catch (e) {
     error.value = e.response?.data?.message ?? "Serverga ulanib bo'lmadi"
   } finally {
@@ -56,7 +60,7 @@ watch(filterCat, loadProducts)
 
 // ── Stats ─────────────────────────────────────────────────
 const stats = computed(() => ({
-  total:    products.value.length,
+  total:    totalCount.value || products.value.length,
   lowStock: products.value.filter(p => p.qty <= p.minQty).length,
   cats:     categories.value.length,
   revenue:  products.value.reduce((s, p) => s + p.retailPrice, 0),

@@ -16,6 +16,7 @@ import { suppliersApi } from '@/api/suppliers.js'
 import { purchasesApi } from '@/api/purchases.js'
 import { genBarcode, printLabels58x40, getLabelSize, setLabelSize } from '@/composables/useBarcodePrint.js'
 import { showToast } from '@/composables/useToast.js'
+import { fmtDate, fmtTime } from '@/composables/useDateTime.js'
 
 // Ro'yxatlar mahsulot formasi bilan bir xil bo'lishi uchun bitta manbadan
 import {
@@ -416,14 +417,7 @@ function switchTab(t) {
 function docLabelCount(d) {
   return d.itemCount || 0
 }
-function fmtDate(s) {
-  if (!s) return '—'
-  const d = String(s).slice(0, 10).split('-')
-  return `${d[2]}.${d[1]}.${d[0]}`
-}
-function fmtTime(s) {
-  return String(s || '').slice(11, 16)
-}
+// fmtDate / fmtTime useDateTime.js dan — vaqt mahalliy zonada ko'rsatiladi
 </script>
 
 <template>

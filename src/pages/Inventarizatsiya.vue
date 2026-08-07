@@ -16,6 +16,7 @@ import { inventoriesApi } from '@/api/inventories.js'
 import { beep } from '@/composables/useBeep.js'
 import { showToast } from '@/composables/useToast.js'
 import { canAdd, canEdit } from '@/composables/usePerms.js'
+import { fmtDate } from '@/composables/useDateTime.js'
 
 const fmt  = v => new Intl.NumberFormat('uz-UZ').format(Math.round(Number(v) || 0))
 const fmtQ = v => {
@@ -270,7 +271,7 @@ async function deleteDoc(id) {
           </div>
 
           <div class="card__meta">
-            <span><AppIcon name="calendar" :size="12" /> {{ d.date?.slice(0,10).split('-').reverse().join('.') }}</span>
+            <span><AppIcon name="calendar" :size="12" /> {{ fmtDate(d.date) }}</span>
             <span><AppIcon name="package" :size="12" /> {{ d.itemCount }} ta tovar</span>
           </div>
 

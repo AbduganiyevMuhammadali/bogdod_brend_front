@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { reportsApi } from '@/api/reports.js'
+import { todayKey } from '@/composables/useDateTime.js'
 
 // ── Tabs ─────────────────────────────────────────────────────────
 const TABS = [
@@ -16,7 +17,7 @@ const TABS = [
 const tab = ref('today')
 
 // ── Date range ───────────────────────────────────────────────────
-const today    = new Date().toISOString().slice(0, 10)
+const today    = todayKey()
 const dateFrom = ref(today)
 const dateTo   = ref(today)
 

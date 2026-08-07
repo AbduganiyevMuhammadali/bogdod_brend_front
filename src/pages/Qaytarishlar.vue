@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { salesApi } from '@/api/sales.js'
+import { todayKey } from '@/composables/useDateTime.js'
 
 // ── State ──────────────────────────────────────────────────────────
 const sales       = ref([])
@@ -12,7 +13,7 @@ const cancelling  = ref(null)   // sale id being cancelled
 // ── Filters ────────────────────────────────────────────────────────
 const tab         = ref('completed')   // 'completed' | 'cancelled'
 const search      = ref('')
-const today       = new Date().toISOString().slice(0, 10)
+const today       = todayKey()
 const dateFrom    = ref(today)
 const dateTo      = ref(today)
 const page        = ref(1)

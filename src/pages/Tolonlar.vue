@@ -4,16 +4,16 @@ import AppIcon from '@/components/AppIcon.vue'
 import { salesApi } from '@/api/sales.js'
 
 // ── Sana ──────────────────────────────────────────────────────────
-const today   = new Date().toISOString().slice(0, 10)
+const today   = todayKey()
 const selDate = ref(today)
 
 function prevDay() {
   const d = new Date(selDate.value); d.setDate(d.getDate() - 1)
-  selDate.value = d.toISOString().slice(0, 10)
+  selDate.value = toDateKey(d)
 }
 function nextDay() {
   const d = new Date(selDate.value); d.setDate(d.getDate() + 1)
-  if (d.toISOString().slice(0, 10) <= today) selDate.value = d.toISOString().slice(0, 10)
+  if (toDateKey(d) <= today) selDate.value = toDateKey(d)
 }
 function goToday() { selDate.value = today }
 
@@ -43,6 +43,7 @@ async function load() {
 }
 
 import { watch } from 'vue'
+import { todayKey, toDateKey } from '@/composables/useDateTime.js'
 watch(selDate, load)
 onMounted(load)
 
