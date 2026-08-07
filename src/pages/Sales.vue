@@ -1271,17 +1271,20 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
         <AppIcon name="inbox" :size="40" :stroke-width="1.2"/>
         <p>Sotuv topilmadi</p>
       </div>
-      <table v-else class="data-tbl">
+      <table v-else class="data-tbl hist-tbl">
         <thead>
+          <!-- Ustun kengliklari aniq belgilangan: aks holda brauzer ularni
+               kontent bo'yicha taqsimlaydi va mijoz nomi bo'sh bo'lgan
+               kunlarda narx ustuni sarlavhasidan siljib ketardi. -->
           <tr>
-            <th>Doc №</th>
-            <th>Sana / Vaqt</th>
-            <th>Mijoz</th>
-            <th>To'lov</th>
-            <th class="ta-c">Tovar</th>
-            <th class="ta-r">Jami summa</th>
-            <th class="ta-r">Qarz</th>
-            <th>Holat</th>
+            <th class="hc-doc">Doc №</th>
+            <th class="hc-date">Sana / Vaqt</th>
+            <th class="hc-client">Mijoz</th>
+            <th class="hc-pay">To'lov</th>
+            <th class="hc-qty ta-c">Tovar</th>
+            <th class="hc-sum ta-r">Jami summa</th>
+            <th class="hc-debt ta-r">Qarz</th>
+            <th class="hc-st">Holat</th>
           </tr>
         </thead>
         <tbody>
@@ -1316,7 +1319,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
               <span class="hist-sum">{{ fmt(saleNet(s)) }}</span>
               <span class="c-dim" style="font-size:11px;font-weight:400"> so'm</span>
               <div v-if="s.discount > 0" class="hist-disc">
-                {{ fmt(s.totalSum) }} − {{ fmt(s.discount) }} chegirma
+                <s>{{ fmt(s.totalSum) }}</s> −{{ fmt(s.discount) }}
               </div>
               <div v-if="showUSD && s.totalUSD>0" class="hist-usd">{{ s.totalUSD.toFixed(2) }} $</div>
             </td>
@@ -2698,8 +2701,22 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 .hist-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .hist-av--sm{width:22px;height:22px;font-size:9px}
 .hist-sum{font-size:14px;font-weight:800;color:#1e293b;letter-spacing:-.02em}
-/* Chegirma izohi — asl narx qancha bo'lganini bildiradi */
-.hist-disc{font-size:10.5px;color:#94a3b8;margin-top:2px;white-space:nowrap}
+/* Chegirma izohi — asl narx chizib tashlanadi, ostida ustunga tekis turadi */
+.hist-disc{font-size:10.5px;color:#94a3b8;margin-top:1px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-disc s{color:#cbd5e1;margin-right:3px}
+
+/* Sotuv tarixi ustun kengliklari — sarlavha bilan qiymat bir chiziqda
+   turishi uchun. Bo'sh mijoz/qarz kataklari ustunni siljitmaydi. */
+.hist-tbl{table-layout:fixed}
+.hist-tbl .hc-doc{width:96px}
+.hist-tbl .hc-date{width:120px}
+.hist-tbl .hc-client{width:auto}
+.hist-tbl .hc-pay{width:110px}
+.hist-tbl .hc-qty{width:78px}
+.hist-tbl .hc-sum{width:170px}
+.hist-tbl .hc-debt{width:120px}
+.hist-tbl .hc-st{width:110px}
+.hist-tbl td{overflow:hidden;text-overflow:ellipsis}
 
 /* Jadval ostidagi jami paneli */
 .hist-tot{
