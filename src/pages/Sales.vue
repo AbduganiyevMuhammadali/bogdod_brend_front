@@ -352,10 +352,47 @@ watch(histFrom, loadHistory)
 watch(histTo, loadHistory)
 watch(histQ, ()=>{ clearTimeout(histTimer); histTimer=setTimeout(loadHistory,300) })
 
+// Sotuvning haqiqiy summasi — chegirma ayrilgandan keyingi.
+// `totalSum` chegirmadan OLDINGI narx, shuning uchun uni to'g'ridan-to'g'ri
+// ko'rsatib bo'lmaydi: jadvalda 225 000, kassada esa 200 000 chiqardi.
+// Bekor qilingan sotuv umumiy hisobga kirmaydi.
+function saleNet(s) {
+  return Math.max(0, (Number(s.totalSum) || 0) - (Number(s.discount) || 0))
+}
+
+// Pastki panel: jami summa + to'lov turlari bo'yicha taqsimot.
+// Bitta sotuvda faqat bitta to'lov turi bo'ladi (sale.payment_type),
+// shuning uchun turlar bo'yicha guruhlaymiz.
+const histTotals = computed(() => {
+  const live = history.value.filter(s => s.status !== 'cancelled')
+  const byType = {}
+  let net = 0, gross = 0, disc = 0, debt = 0
+
+  for (const s of live) {
+    const n = saleNet(s)
+    net   += n
+    gross += Number(s.totalSum) || 0
+    disc  += Number(s.discount) || 0
+    debt  += Number(s.debtSum)  || 0
+
+    const t = s.paymentType || 'Naqd'
+    if (!byType[t]) byType[t] = { type: t, sum: 0, count: 0 }
+    byType[t].sum   += n
+    byType[t].count += 1
+  }
+
+  return {
+    count: live.length,
+    net, gross, disc, debt,
+    // Kattadan kichikka — eng ko'p ishlatilgani birinchi turadi
+    types: Object.values(byType).sort((a, b) => b.sum - a.sum),
+  }
+})
+
 // ── CSV export ────────────────────────────────────────────────────
 function exportHistoryCSV() {
   if(!history.value.length) return
-  const cols=['Doc №','Sana','Vaqt','Mijoz','To\'lov','Mahsulotlar','Jami summa','Chegirma','To\'langan','Qarz','Holat']
+  const cols=['Doc №','Sana','Vaqt','Mijoz','To\'lov','Mahsulotlar','Asl narx','Chegirma','Sotuv summasi','To\'langan','Qarz','Holat']
   const rows=history.value.map(s=>[
     `#${String(s.docNumber).padStart(5,'0')}`,
     fmtDate(s.date, ''),
@@ -365,6 +402,7 @@ function exportHistoryCSV() {
     s.itemCount,
     s.totalSum,
     s.discount||0,
+    saleNet(s),          // chegirma ayrilgandan keyingi haqiqiy summa
     s.paidSum||0,
     s.debtSum||0,
     s.status==='completed'?'Bajarildi':'Bekor',
@@ -544,9 +582,9 @@ function printSaleReceipt(s){
       <div class="dash"></div>
       ${lines}
       <div class="dash"></div>
-      <div class="row"><span>Jami</span><span>${f(s.totalSum+(s.discount||0))} so'm</span></div>
+      <div class="row"><span>Jami</span><span>${f(s.totalSum)} so'm</span></div>
       ${s.discount>0?`<div class="row disc"><span>Chegirma</span><span>− ${f(s.discount)} so'm</span></div>`:''}
-      <div class="total-row"><span>TO'LASH KERAK</span><span>${f(s.totalSum)} so'm</span></div>
+      <div class="total-row"><span>TO'LASH KERAK</span><span>${f(saleNet(s))} so'm</span></div>
       <div class="row"><span>To'lov turi</span><span>${s.paymentType}</span></div>
       ${s.paidSum>0?`<div class="row"><span>To'langan</span><span>${f(s.paidSum)} so'm</span></div>`:''}
       ${s.debtSum>0?`<div class="row debt"><span>Qarz qoldi</span><span>${f(s.debtSum)} so'm</span></div>`:''}
@@ -1271,9 +1309,15 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
               </span>
             </td>
             <td class="ta-c"><span class="cnt-badge">{{ s.itemCount }} ta</span></td>
+            <!-- Asosiy raqam — haqiqatda olingan pul. Chegirma qo'llangan
+                 bo'lsa, asl narx ostida kichik qilib ko'rsatiladi, aks holda
+                 jadvalda 225 000 turib, kassada 200 000 bo'lib chalkashardi. -->
             <td class="ta-r">
-              <span class="hist-sum">{{ fmt(s.totalSum) }}</span>
+              <span class="hist-sum">{{ fmt(saleNet(s)) }}</span>
               <span class="c-dim" style="font-size:11px;font-weight:400"> so'm</span>
+              <div v-if="s.discount > 0" class="hist-disc">
+                {{ fmt(s.totalSum) }} − {{ fmt(s.discount) }} chegirma
+              </div>
               <div v-if="showUSD && s.totalUSD>0" class="hist-usd">{{ s.totalUSD.toFixed(2) }} $</div>
             </td>
             <td class="ta-r">
@@ -1285,6 +1329,43 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
           </tr>
         </tbody>
       </table>
+
+      <!-- Jami: umumiy summa va u qaysi to'lov turlaridan yig'ilgani.
+           Kassani yopishda qo'l bilan qo'shib chiqmaslik uchun. -->
+      <div v-if="histTotals.count" class="hist-tot">
+        <div class="hist-tot__main">
+          <span class="hist-tot__lbl">Jami savdo</span>
+          <span class="hist-tot__sum">{{ fmt(histTotals.net) }} <em>so'm</em></span>
+          <span class="hist-tot__cnt">
+            {{ histTotals.count }} ta sotuv<template v-if="histTotals.debt > 0">
+              · qo'lga tushgan {{ fmt(histTotals.net - histTotals.debt) }}</template>
+          </span>
+        </div>
+
+        <div class="hist-tot__split">
+          <div v-for="t in histTotals.types" :key="t.type" class="hist-tot__cell">
+            <span class="hist-tot__cell-lbl">
+              <AppIcon :name="PAY_ICONS[t.type]||'dollar-sign'" :size="12"/>
+              {{ t.type }}
+            </span>
+            <span class="hist-tot__cell-val">{{ fmt(t.sum) }}</span>
+            <span class="hist-tot__cell-cnt">{{ t.count }} ta</span>
+          </div>
+
+          <div v-if="histTotals.disc > 0" class="hist-tot__cell hist-tot__cell--disc">
+            <span class="hist-tot__cell-lbl">Chegirma</span>
+            <span class="hist-tot__cell-val">−{{ fmt(histTotals.disc) }}</span>
+            <span class="hist-tot__cell-cnt">{{ fmt(histTotals.gross) }} dan</span>
+          </div>
+
+          <!-- "Qarzga sotildi" (to'lov turi) bilan chalkashmasligi uchun
+               "to'lanmagan" deb nomlanadi — bu hali kelmagan pul -->
+          <div v-if="histTotals.debt > 0" class="hist-tot__cell hist-tot__cell--debt">
+            <span class="hist-tot__cell-lbl">To'lanmagan</span>
+            <span class="hist-tot__cell-val">{{ fmt(histTotals.debt) }}</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1763,12 +1844,16 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 
               <!-- Totals -->
               <div class="sm-totals">
+                <!-- `totalSum` backendda chegirmadan OLDINGI summa
+                     (sale.controller.js: total_sum = items yig'indisi),
+                     shuning uchun unga chegirmani qo'shish kerak emas —
+                     ilgari shunday qilinib, jami oshib ketardi. -->
                 <div class="sm-total-row">
                   <span>Tovarlar jami</span>
                   <div class="sm-total-dual">
-                    <span>{{ fmt(saleModal.totalSum + (saleModal.discount||0)) }} so'm</span>
+                    <span>{{ fmt(saleModal.totalSum) }} so'm</span>
                     <span v-if="showUSD && saleModal.exchangeRate>0" class="sm-dual-usd">
-                      {{ ((saleModal.totalSum+(saleModal.discount||0))/saleModal.exchangeRate).toFixed(2) }} $
+                      {{ (saleModal.totalSum/saleModal.exchangeRate).toFixed(2) }} $
                     </span>
                   </div>
                 </div>
@@ -1782,8 +1867,10 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
                 <div class="sm-total-main">
                   <span>To'lash kerak</span>
                   <div class="sm-total-dual">
-                    <span>{{ fmt(saleModal.totalSum) }} so'm</span>
-                    <span v-if="showUSD && saleModal.totalUSD>0" class="sm-dual-usd-main">{{ saleModal.totalUSD.toFixed(2) }} $</span>
+                    <span>{{ fmt(saleNet(saleModal)) }} so'm</span>
+                    <span v-if="showUSD && saleModal.exchangeRate>0" class="sm-dual-usd-main">
+                      {{ (saleNet(saleModal)/saleModal.exchangeRate).toFixed(2) }} $
+                    </span>
                   </div>
                 </div>
                 <div v-if="saleModal.paidSum > 0" class="sm-total-row sm-total-paid">
@@ -2611,6 +2698,37 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 .hist-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .hist-av--sm{width:22px;height:22px;font-size:9px}
 .hist-sum{font-size:14px;font-weight:800;color:#1e293b;letter-spacing:-.02em}
+/* Chegirma izohi — asl narx qancha bo'lganini bildiradi */
+.hist-disc{font-size:10.5px;color:#94a3b8;margin-top:2px;white-space:nowrap}
+
+/* Jadval ostidagi jami paneli */
+.hist-tot{
+  display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  margin:0;padding:13px 20px;border-top:2px solid #e2e8f0;background:#f8fafc;
+}
+.hist-tot__main{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.hist-tot__lbl{font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
+.hist-tot__sum{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.hist-tot__sum em{font-size:12px;font-weight:600;color:#64748b;font-style:normal}
+.hist-tot__cnt{font-size:11.5px;color:#94a3b8}
+
+.hist-tot__split{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.hist-tot__cell{
+  display:flex;flex-direction:column;gap:1px;min-width:96px;
+  padding:6px 12px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;
+}
+.hist-tot__cell-lbl{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:#64748b}
+.hist-tot__cell-val{font-size:14px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums}
+.hist-tot__cell-cnt{font-size:10px;color:#94a3b8}
+.hist-tot__cell--disc{border-color:#fed7aa;background:#fff7ed}
+.hist-tot__cell--disc .hist-tot__cell-val{color:#c2410c}
+.hist-tot__cell--debt{border-color:#fecaca;background:#fef2f2}
+.hist-tot__cell--debt .hist-tot__cell-val{color:#dc2626}
+
+@media (max-width:820px){
+  .hist-tot{flex-direction:column;align-items:stretch;gap:12px}
+  .hist-tot__split{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+}
 .spin-ico{animation:spin-r .7s linear infinite}
 @keyframes spin-r{to{transform:rotate(360deg)}}
 
