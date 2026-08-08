@@ -85,9 +85,11 @@ onMounted(async () => {
 })
 
 // ── Nom yasash — ProductFormModal.buildName() bilan bir xil tartib ──────
-// Nom tartibi: Model/Razmer + Brend + Umumiy nom + Rang.
-// Model birinchi turadi — u ko'pincha takrorlanmas kod (artikul) bo'ladi
-// va ro'yxatda, yorliqda, qidiruvda birinchi ko'zga tashlanishi kerak.
+// Nom tartibi: Model + Brend + Umumiy nom + Rang.
+// Model birinchi turadi — u ko'pincha takrorlanmas kod (artikul, masalan
+// "112") bo'ladi va ro'yxatda, yorliqda, qidiruvda birinchi ko'zga
+// tashlanishi kerak. Razmer alohida: u nom oxiriga backend tomonidan
+// qo'shiladi, chunki har razmer alohida mahsulot bo'lib yaratiladi.
 function autoName(r) {
   return [r.model, r.brand, r.generalName, r.color]
     .map(v => (v || '').trim()).filter(Boolean).join(' ')
@@ -232,9 +234,11 @@ async function save() {
       const nm = displayName(r)
       const price = Number(r.retailPrice) || 0
       if (r.sizes.length) {
+        // Nom: "<model> <brend> <nom> <rang> <razmer>" — backenddagi
+        // tartib bilan bir xil. Yorliqda model boshida turadi.
         r.sizes.forEach(s => printQueue.value.push({
           name: `${nm} ${s.size}`.trim(),
-          model: s.size,                 // razmer yorliqda alohida chiqadi
+          model: (r.model || '').trim() || s.size,
           price,
           barcode: s.barcode,
           qty: Number(s.qty) || 1,
@@ -838,8 +842,7 @@ function docLabelCount(d) {
                 <input
                   v-model="r.model"
                   class="qi__inp"
-                  :disabled="r.sizes.length > 0"
-                  :placeholder="r.sizes.length ? `${r.sizes.length} razmer` : '—'"
+                  :placeholder="r.sizes.length ? `${r.sizes.length} razmer + model` : '—'"
                   @keydown.enter.prevent="onEnter(i)"
                 />
               </td>
