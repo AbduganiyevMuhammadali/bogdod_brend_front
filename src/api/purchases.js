@@ -6,6 +6,11 @@ function itemToFront(i) {
     productId:          i.product_id       ?? null,
     barcode:            i.barcode          ?? '',
     productName:        i.product_name     ?? '',
+    // Mahsulotning joriy nomi/modeli — tarixda va yorliqda ko'rsatiladi.
+    // `product_name` saqlangan paytdagi nom bo'lgani uchun eski
+    // hujjatlarda modelsiz bo'lishi mumkin.
+    productModel:       i.product?.model   ?? '',
+    currentName:        i.product?.name    ?? '',
     stockQty:           Number(i.stock_qty)           || 0,
     pkgQty:             Number(i.pkg_qty)             || 0,
     unitQty:            Number(i.unit_qty)            || 0,
@@ -69,6 +74,9 @@ function toFront(p) {
     // Hujjatni kim yaratgan — tezkor kiritish tarixida ko'rsatiladi
     createdBy:    p.created_by     ?? null,
     creatorName:  p.creator ? (p.creator.fullname || p.creator.username || '') : '',
+    // Yorliqlar chop etilganmi
+    labelsPrintedAt: p.labels_printed_at ?? null,
+    printerName:  p.printer ? (p.printer.fullname || p.printer.username || '') : '',
     status:       p.status        ?? 'draft',
     totalSum:     Number(p.total_sum) || 0,
     totalUsd:     Number(p.total_usd) || 0,
@@ -114,6 +122,11 @@ export const purchasesApi = {
   },
   async update(id, form) {
     const res = await http.put(`/purchases/${id}`, toBack(form))
+    return toFront(res.data)
+  },
+  // Yorliqlar chop etilganini belgilash (printed:false — belgini olib tashlash)
+  async markLabelsPrinted(id, printed = true) {
+    const res = await http.post(`/purchases/${id}/labels-printed`, { printed })
     return toFront(res.data)
   },
   async confirm(id) {

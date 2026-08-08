@@ -85,8 +85,11 @@ onMounted(async () => {
 })
 
 // ── Nom yasash — ProductFormModal.buildName() bilan bir xil tartib ──────
+// Nom tartibi: Model + Brend + Umumiy nom + Rang.
+// Model birinchi turadi — ro'yxatda va yorliqda qaysi model ekani
+// darhol ko'rinsin (razmer tanlanganda uning o'rniga razmer chiqadi).
 function autoName(r) {
-  return [r.brand, r.generalName, r.model, r.color]
+  return [r.model, r.brand, r.generalName, r.color]
     .map(v => (v || '').trim()).filter(Boolean).join(' ')
 }
 function displayName(r) { return r.nameOverride.trim() || autoName(r) }
@@ -384,18 +387,50 @@ async function printDoc(id, perItem = true) {
     const items = (doc.items || [])
       .filter(i => i.barcode)
       .map(i => ({
-        name:    i.productName,
+        name:    itemName(i),
         price:   i.retailPriceSum,
         barcode: i.barcode,
         qty:     perItem ? Math.max(1, Math.round(Number(i.unitQty) || 1)) : 1,
       }))
     if (!items.length) { showToast('Bu hujjatda shtrix-kodli mahsulot yo\'q', 'err'); return }
     printLabels58x40(items)
+
+    // Chop etilgani belgilanadi — tarixda qaysi hujjat bosilgani ko'rinsin
+    await markPrinted(id, true)
   } catch {
     showToast('Chop etishda xatolik', 'err')
   } finally {
     docBusy.value = false
   }
+}
+
+// Yorliq/tarix uchun nom. Mahsulotning JORIY nomi ustun turadi — unda
+// model boshida bo'ladi. `productName` saqlangan paytdagi nom, eski
+// hujjatlarda modelsiz qolgan bo'lishi mumkin.
+function itemName(it) {
+  return (it.currentName || '').trim() || it.productName || ''
+}
+
+// Chop etilgan belgisini qo'yish / olib tashlash
+async function markPrinted(id, printed) {
+  try {
+    const upd = await purchasesApi.markLabelsPrinted(id, printed)
+    // Ro'yxatni qayta yuklamasdan joyida yangilaymiz
+    const d = history.value.find(x => x.id === id)
+    if (d) {
+      d.labelsPrintedAt = upd.labelsPrintedAt
+      d.printerName     = upd.printerName
+    }
+  } catch {
+    showToast('Belgilashda xatolik', 'err')
+  }
+}
+
+// Belgini qo'lda o'zgartirish (masalan noto'g'ri bosilgan bo'lsa)
+async function togglePrinted(d) {
+  const on = !!d.labelsPrintedAt
+  if (on && !confirm('“Chop etilgan” belgisi olib tashlansinmi?')) return
+  await markPrinted(d.id, !on)
 }
 
 // ── Tarixdagi narxlarni tahrirlash ──────────────────────────────────────
@@ -454,7 +489,7 @@ function itemMargin(it) {
 
 function printOneFromDoc(item) {
   printLabels58x40([{
-    name:    item.productName,
+    name:    itemName(item),
     price:   item.retailPriceSum,
     barcode: item.barcode,
     qty:     Math.max(1, Math.round(Number(item.unitQty) || 1)),
@@ -572,8 +607,23 @@ function docLabelCount(d) {
             </div>
             <div class="qi__hcard-r">
               <span class="qi__hcount">{{ docLabelCount(d) }} ta mahsulot</span>
+
+              <!-- Chop etilganmi — bosib belgini o'zgartirish mumkin -->
+              <button
+                class="qi__hprint"
+                :class="d.labelsPrintedAt ? 'is-on' : 'is-off'"
+                :title="d.labelsPrintedAt
+                  ? `Chop etilgan${d.printerName ? ' — ' + d.printerName : ''} · ${fmtDate(d.labelsPrintedAt)} ${fmtTime(d.labelsPrintedAt)}\nBelgini olib tashlash uchun bosing`
+                  : 'Hali chop etilmagan — belgilash uchun bosing'"
+                @click.stop="togglePrinted(d)"
+              >
+                <AppIcon :name="d.labelsPrintedAt ? 'check-circle' : 'circle'" :size="12" />
+                {{ d.labelsPrintedAt ? 'Chop etilgan' : 'Chop etilmagan' }}
+              </button>
+
               <button class="qi__btn qi__btn--print qi__btn--sm" :disabled="docBusy" @click.stop="printDoc(d.id)">
-                <AppIcon name="printer" :size="13" /> Yorliqlar
+                <AppIcon name="printer" :size="13" />
+                {{ d.labelsPrintedAt ? 'Qayta' : 'Yorliqlar' }}
               </button>
               <AppIcon :name="openDocId === d.id ? 'chevron-up' : 'chevron-down'" :size="15" class="qi__hchev" />
             </div>
@@ -595,7 +645,10 @@ function docLabelCount(d) {
               </thead>
               <tbody>
                 <tr v-for="it in openDocItems" :key="it.id" :class="{ 'is-edit': editItemId === it.id }">
-                  <td>{{ it.productName }}</td>
+                  <td>
+                    {{ itemName(it) }}
+                    <span v-if="it.productModel" class="qi__hmodel">{{ it.productModel }}</span>
+                  </td>
 
                   <!-- Tannarx: bo'sh qolgan bo'lsa ko'zga tashlanadi -->
                   <td class="ta-r">
@@ -990,6 +1043,17 @@ function docLabelCount(d) {
 .qi__spin--dark { border-color: rgba(124,66,235,.3); border-top-color: #7c42eb; }
 .qi__hcard-r { display: flex; align-items: center; gap: 10px; }
 .qi__hcount { font-size: 12px; color: #64748b; white-space: nowrap; }
+
+/* Chop etilgan / etilmagan belgisi */
+.qi__hprint {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px; border-radius: 99px; border: 1px solid transparent;
+  font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.qi__hprint.is-on  { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.qi__hprint.is-on:hover  { background: #d1fae5; }
+.qi__hprint.is-off { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+.qi__hprint.is-off:hover { background: #ffedd5; }
 .qi__hchev { color: #94a3b8; }
 .qi__btn--sm { height: 30px; padding: 0 11px; font-size: 12px; }
 
@@ -1002,6 +1066,11 @@ function docLabelCount(d) {
 .qi__hitems-tbl td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #0f172a; }
 .qi__hitems-tbl tr:last-child td { border-bottom: none; }
 .qi__hbc { font-size: 11.5px; color: #64748b; font-variant-numeric: tabular-nums; }
+/* Model — nom yonida ajratib ko'rsatiladi */
+.qi__hmodel {
+  margin-left: 6px; padding: 1px 7px; border-radius: 5px;
+  background: #f1f5f9; font-size: 10.5px; font-weight: 700; color: #475569;
+}
 .ta-r { text-align: right; }
 .ta-c { text-align: center; }
 
