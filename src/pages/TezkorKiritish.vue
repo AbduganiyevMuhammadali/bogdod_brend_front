@@ -476,42 +476,52 @@ async function togglePrinted(d) {
 // to'g'rilash mumkin — backend shu partiyadan sotilganlarning tannarxini ham
 // yangilaydi, shunda foyda hisoboti to'g'ri chiqadi.
 const editItemId  = ref(null)
+const editName    = ref('')
 const editCost    = ref('')
 const editRetail  = ref('')
 const editBusy    = ref(false)
 
 function startEdit(item) {
   editItemId.value = item.id
+  editName.value   = itemName(item)
   editCost.value   = item.costPrice      || ''
   editRetail.value = item.retailPriceSum || ''
 }
 function cancelEdit() {
   editItemId.value = null
+  editName.value = ''
   editCost.value = ''
   editRetail.value = ''
 }
 
 async function saveEdit(item) {
+  const name   = editName.value.trim()
   const cost   = Number(editCost.value)   || 0
   const retail = Number(editRetail.value) || 0
+  if (!name) { showToast('Mahsulot nomi bo\'sh bo\'lishi mumkin emas', 'err'); return }
   if (cost < 0 || retail < 0) { showToast('Narx manfiy bo\'la olmaydi', 'err'); return }
 
   editBusy.value = true
   try {
     const updated = await purchasesApi.updateItemPrices(openDocId.value, item.id, {
+      name,
       costPrice:   cost,
       retailPrice: retail,
     })
-    // Jadvalni qayta yuklamasdan joyida yangilaymiz
+    // Jadvalni qayta yuklamasdan joyida yangilaymiz. `currentName` ham
+    // yozamiz — itemName() birinchi navbatda shuni o'qiydi, aks holda
+    // jadvalda eski nom qolib ketardi.
     Object.assign(item, {
+      productName:    updated.productName,
+      currentName:    updated.productName,
       costPrice:      updated.costPrice,
       retailPriceSum: updated.retailPriceSum,
       totalSum:       updated.totalSum,
     })
     cancelEdit()
-    showToast('Narx yangilandi', 'ok')
+    showToast('Saqlandi', 'ok')
   } catch (e) {
-    showToast(e?.response?.data?.message || 'Narxni saqlab bo\'lmadi', 'err')
+    showToast(e?.response?.data?.message || 'Saqlab bo\'lmadi', 'err')
   } finally {
     editBusy.value = false
   }
@@ -685,7 +695,17 @@ function docLabelCount(d) {
                 <tr v-for="it in openDocItems" :key="it.id" :class="{ 'is-edit': editItemId === it.id }">
                   <!-- Model nom boshida turadi, shuning uchun alohida
                        belgi qo'yilmaydi — takrorlanib ketardi -->
-                  <td>{{ itemName(it) }}</td>
+                  <td>
+                    <input
+                      v-if="editItemId === it.id"
+                      v-model="editName"
+                      class="qi__inp qi__inp--name"
+                      placeholder="Mahsulot nomi"
+                      @keydown.enter.prevent="saveEdit(it)"
+                      @keydown.esc="cancelEdit()"
+                    />
+                    <template v-else>{{ itemName(it) }}</template>
+                  </td>
 
                   <!-- Tannarx: bo'sh qolgan bo'lsa ko'zga tashlanadi -->
                   <td class="ta-r">
@@ -731,7 +751,7 @@ function docLabelCount(d) {
                       </button>
                     </template>
                     <template v-else>
-                      <button class="qi__mini qi__mini--copy" title="Narxlarni tahrirlash" @click="startEdit(it)">
+                      <button class="qi__mini qi__mini--copy" title="Nom va narxlarni tahrirlash" @click="startEdit(it)">
                         <AppIcon name="edit-2" :size="11" />
                       </button>
                       <button
@@ -1108,6 +1128,8 @@ function docLabelCount(d) {
 /* Tarixdagi narx tahriri */
 .qi__hitems-tbl tr.is-edit td { background: #faf5ff; }
 .qi__hitems-tbl .qi__inp--sm { display: inline-block; width: 100px; height: 27px; }
+/* Nom maydoni — ustun kengligini to'liq egallaydi */
+.qi__hitems-tbl .qi__inp--name { width: 100%; min-width: 180px; height: 27px; font-size: 12.5px; }
 .qi__nocost {
   padding: 1px 7px; border-radius: 5px; background: #fef3c7;
   font-size: 11px; color: #b45309;
