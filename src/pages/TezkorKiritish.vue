@@ -222,6 +222,9 @@ async function save() {
 
     const res = await productsApi.bulkCreate(payload, { supplierId: supplierId.value })
     savedCount.value += res.yaratildi || 0
+    // Qaysi hujjatga tegishli ekanini eslab qolamiz — chop etilgach
+    // "chop etilgan" deb belgilash uchun (bir necha saqlash yig'ilishi mumkin)
+    if (res.kirim_hujjati) pendingDocIds.value.push(res.kirim_hujjati)
 
     // Yorliq chop etish uchun saqlab qo'yamiz — foydalanuvchi barcha
     // mahsulotni kiritib bo'lgach, hammasini birdan chop etadi.
@@ -268,22 +271,35 @@ async function save() {
 // Saqlangan mahsulotlar shu ro'yxatda to'planadi. Foydalanuvchi barchasini
 // kiritib bo'lgandan keyin bir marta bosib, hammasini chop etadi.
 const printQueue = ref([])
+// Chop etish navbatidagi yorliqlar qaysi hujjatlardan yig'ilgani
+const pendingDocIds = ref([])
 const printPerItem = ref(true)   // har dona uchun alohida yorliqmi
 
 const printLabelCount = computed(() =>
   printQueue.value.reduce((a, i) => a + (printPerItem.value ? Math.max(1, i.qty) : 1), 0)
 )
 
-function doPrint() {
+async function doPrint() {
   if (!printQueue.value.length) return
   const items = printQueue.value.map(i => ({ ...i, qty: printPerItem.value ? Math.max(1, i.qty) : 1 }))
   const ok = printLabels58x40(items)
-  if (!ok) showToast('Chop etish oynasi ochilmadi — brauzer bloklagan bo\'lishi mumkin', 'err')
+  if (!ok) {
+    showToast('Chop etish oynasi ochilmadi — brauzer bloklagan bo\'lishi mumkin', 'err')
+    return
+  }
+  // Shu navbatdagi hujjatlarni "chop etilgan" deb belgilaymiz, shunda
+  // Tarix bo'limida ular allaqachon bosilgani ko'rinib turadi
+  const ids = [...new Set(pendingDocIds.value)]
+  pendingDocIds.value = []
+  for (const id of ids) {
+    try { await purchasesApi.markLabelsPrinted(id, true) } catch { /* muhim emas */ }
+  }
 }
 
 function clearPrintQueue() {
   if (!confirm('Chop etish ro\'yxati tozalansinmi?')) return
   printQueue.value = []
+  pendingDocIds.value = []
 }
 
 // ── Yorliq o'lchamini sozlash ───────────────────────────────────────────
