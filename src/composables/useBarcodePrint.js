@@ -150,7 +150,24 @@ function labelHtml58x40(item) {
     margin: 0,
   })
 
-  const name  = String(item.name || '').trim()
+  // Model / razmer nomning boshida turadi — do'konda tovarni topishda
+  // aynan shu ishlatiladi, shuning uchun birinchi ko'zga tashlansin.
+  //
+  // Nom odatda "Brend Nom Model Rang" tartibida yasalgan, ya'ni model
+  // uning ichida ham bor. Uni oldiga qo'shishdan avval nomdan olib
+  // tashlaymiz — aks holda "X-500 Antony Finka X-500 Ko'k" bo'lib ketardi.
+  const model   = String(item.model || '').trim()
+  const rawName = String(item.name  || '').trim()
+
+  let name = rawName
+  if (model) {
+    const stripped = rawName
+      // Nom ichidagi modelni butun so'z sifatida olib tashlaymiz
+      .replace(new RegExp(`(^|\\s)${escapeRe(model)}(?=\\s|$)`, 'i'), ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+    name = `${model} ${stripped}`.trim()
+  }
   const price = Number(item.price) || 0
   // Narx 0 bo'lsa yozmaymiz — bo'sh joy nom uchun qoladi va
   // yorliqda "0 so'm" degan chalg'ituvchi yozuv turmaydi.
@@ -166,21 +183,18 @@ function labelHtml58x40(item) {
                   : name.length > 26 ? 'lb__name--sm'
                   : ''
 
-  // Model / razmer — nom ostida alohida qatorda. Do'konda tovarni
-  // topishda aynan shu ishlatiladi, shuning uchun ko'zga tashlanib tursin.
-  const model = String(item.model || '').trim()
-  const modelHtml = model
-    ? `<div class="lb__model">${escapeHtml(model)}</div>`
-    : ''
-
   return `
     <div class="lb"><div class="lb__in">
       <div class="lb__name ${nameClass}">${escapeHtml(name)}</div>
-      ${modelHtml}
       ${priceHtml}
       <img class="lb__bc" src="${png}" />
       <div class="lb__code">${escapeHtml(item.barcode)}</div>
     </div></div>`
+}
+
+// Model ichida regexp uchun maxsus belgi bo'lishi mumkin (X-500, L/XL, 40+)
+function escapeRe(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function escapeHtml(s) {
@@ -272,21 +286,6 @@ export function printLabels58x40(items) {
     .lb__name--sm { font-size: 2.6mm; height: 6mm; }
     .lb__name--xs { font-size: 2.3mm; height: 5.3mm; }
 
-    /* Model / razmer — nom ostida, ajratib ko'rsatiladi */
-    .lb__model {
-      max-width: 100%;
-      padding: 0 1.5mm;
-      border: 0.25mm solid #000;
-      border-radius: 1mm;
-      font-size: 3.1mm;
-      font-weight: 800;
-      line-height: 1.25;
-      letter-spacing: .15mm;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex: 0 0 auto;
-    }
     .lb__price {
       font-size: 5.2mm;
       font-weight: 900;
