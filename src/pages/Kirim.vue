@@ -240,6 +240,7 @@ async function ensureProductBarcode(product) {
 function printRowLabel(item) {
   printLabels58x40([{
     name:    item.productName,
+    model:   item.productModel,
     price:   item.retailPriceSum,
     barcode: item.barcode,
     qty:     Math.max(1, Math.round(Number(item.unitQty) || 1)),
@@ -250,6 +251,7 @@ function printAllLabels() {
     .filter(i => i.productName && i.barcode)
     .map(i => ({
       name:    i.productName,
+      model:   i.productModel,
       price:   i.retailPriceSum,
       barcode: i.barcode,
       qty:     Math.max(1, Math.round(Number(i.unitQty) || 1)),

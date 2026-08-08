@@ -166,9 +166,17 @@ function labelHtml58x40(item) {
                   : name.length > 26 ? 'lb__name--sm'
                   : ''
 
+  // Model / razmer — nom ostida alohida qatorda. Do'konda tovarni
+  // topishda aynan shu ishlatiladi, shuning uchun ko'zga tashlanib tursin.
+  const model = String(item.model || '').trim()
+  const modelHtml = model
+    ? `<div class="lb__model">${escapeHtml(model)}</div>`
+    : ''
+
   return `
     <div class="lb"><div class="lb__in">
       <div class="lb__name ${nameClass}">${escapeHtml(name)}</div>
+      ${modelHtml}
       ${priceHtml}
       <img class="lb__bc" src="${png}" />
       <div class="lb__code">${escapeHtml(item.barcode)}</div>
@@ -264,6 +272,21 @@ export function printLabels58x40(items) {
     .lb__name--sm { font-size: 2.6mm; height: 6mm; }
     .lb__name--xs { font-size: 2.3mm; height: 5.3mm; }
 
+    /* Model / razmer — nom ostida, ajratib ko'rsatiladi */
+    .lb__model {
+      max-width: 100%;
+      padding: 0 1.5mm;
+      border: 0.25mm solid #000;
+      border-radius: 1mm;
+      font-size: 3.1mm;
+      font-weight: 800;
+      line-height: 1.25;
+      letter-spacing: .15mm;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 0 0 auto;
+    }
     .lb__price {
       font-size: 5.2mm;
       font-weight: 900;

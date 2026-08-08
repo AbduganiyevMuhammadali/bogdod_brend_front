@@ -54,12 +54,11 @@ const form = reactive({
 // ── Auto-compose name ─────────────────────────────────────────────────
 const nameAuto = ref(!p)
 
-// Tartib TezkorKiritish.autoName() bilan bir xil: Model oldinda
 function buildName() {
-  return [form.model, form.brand, form.generalName, form.color]
+  return [form.brand, form.generalName, form.model, form.color]
     .map(v => (v || '').trim()).filter(Boolean).join(' ')
 }
-watch(() => [form.model, form.brand, form.generalName, form.color],
+watch(() => [form.brand, form.generalName, form.model, form.color],
   () => { if (nameAuto.value) form.name = buildName() })
 
 function onNameInput()  { nameAuto.value = false }

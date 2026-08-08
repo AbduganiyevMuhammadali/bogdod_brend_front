@@ -85,11 +85,8 @@ onMounted(async () => {
 })
 
 // ── Nom yasash — ProductFormModal.buildName() bilan bir xil tartib ──────
-// Nom tartibi: Model + Brend + Umumiy nom + Rang.
-// Model birinchi turadi — ro'yxatda va yorliqda qaysi model ekani
-// darhol ko'rinsin (razmer tanlanganda uning o'rniga razmer chiqadi).
 function autoName(r) {
-  return [r.model, r.brand, r.generalName, r.color]
+  return [r.brand, r.generalName, r.model, r.color]
     .map(v => (v || '').trim()).filter(Boolean).join(' ')
 }
 function displayName(r) { return r.nameOverride.trim() || autoName(r) }
@@ -234,6 +231,7 @@ async function save() {
       if (r.sizes.length) {
         r.sizes.forEach(s => printQueue.value.push({
           name: `${nm} ${s.size}`.trim(),
+          model: s.size,                 // razmer yorliqda alohida chiqadi
           price,
           barcode: s.barcode,
           qty: Number(s.qty) || 1,
@@ -241,6 +239,7 @@ async function save() {
       } else {
         printQueue.value.push({
           name: nm,
+          model: (r.model || '').trim(),
           price,
           barcode: r.barcode.trim(),
           qty: Number(r.qty) || 1,
@@ -327,12 +326,14 @@ function printTestLabel() {
   printLabels58x40([
     {
       name: 'SINOV — chetlarni tekshiring',
+      model: 'XL',
       price: 199000,
       barcode: genBarcode(),
       qty: 1,
     },
     {
       name: 'Stefano Ricci Finka M To\'q ko\'k — uzun nom sinovi',
+      model: '3XL',
       price: 225000,
       barcode: genBarcode(),
       qty: 1,
@@ -404,6 +405,7 @@ async function printDoc(id, perItem = true) {
       .filter(i => i.barcode)
       .map(i => ({
         name:    itemName(i),
+        model:   i.productModel,
         price:   i.retailPriceSum,
         barcode: i.barcode,
         qty:     perItem ? Math.max(1, Math.round(Number(i.unitQty) || 1)) : 1,
@@ -506,6 +508,7 @@ function itemMargin(it) {
 function printOneFromDoc(item) {
   printLabels58x40([{
     name:    itemName(item),
+    model:   item.productModel,
     price:   item.retailPriceSum,
     barcode: item.barcode,
     qty:     Math.max(1, Math.round(Number(item.unitQty) || 1)),
