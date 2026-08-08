@@ -150,12 +150,12 @@ function labelHtml58x40(item) {
     margin: 0,
   })
 
-  // Model / razmer nomning boshida turadi — do'konda tovarni topishda
-  // aynan shu ishlatiladi, shuning uchun birinchi ko'zga tashlansin.
+  // Model / razmer nomning boshida turadi — u ko'pincha takrorlanmas kod
+  // (artikul) bo'lgani uchun birinchi ko'zga tashlanishi kerak.
   //
-  // Nom odatda "Brend Nom Model Rang" tartibida yasalgan, ya'ni model
-  // uning ichida ham bor. Uni oldiga qo'shishdan avval nomdan olib
-  // tashlaymiz — aks holda "X-500 Antony Finka X-500 Ko'k" bo'lib ketardi.
+  // Yangi mahsulotlarda nom allaqachon shu tartibda yasaladi, lekin eski
+  // hujjatlarda "Brend Nom Model Rang" bo'lishi mumkin — u holda model
+  // nomdan olib tashlanib, boshiga qo'yiladi (aks holda takrorlanardi).
   const model   = String(item.model || '').trim()
   const rawName = String(item.name  || '').trim()
 

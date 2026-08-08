@@ -6,7 +6,7 @@
 //  - Mahsulot bo'limidagi BARCHA xususiyatlar shu yerda ham bor, shuning
 //    uchun keyin mahsulotni tahrirlaganda hamma maydon joyida turadi.
 //  - To'liq nom ProductFormModal dagi bilan bir xil mantiqda yasaladi:
-//    Brend + Umumiy nom + Model/Razmer + Rang.
+//    Model/Razmer + Brend + Umumiy nom + Rang.
 //  - Saqlash bitta so'rovda ketadi va backend boshlang'ich qoldiq uchun
 //    kirim hujjatini ochadi — FIFO tannarx to'g'ri shakllanadi.
 import { ref, computed, nextTick, onMounted } from 'vue'
@@ -85,8 +85,11 @@ onMounted(async () => {
 })
 
 // ── Nom yasash — ProductFormModal.buildName() bilan bir xil tartib ──────
+// Nom tartibi: Model/Razmer + Brend + Umumiy nom + Rang.
+// Model birinchi turadi — u ko'pincha takrorlanmas kod (artikul) bo'ladi
+// va ro'yxatda, yorliqda, qidiruvda birinchi ko'zga tashlanishi kerak.
 function autoName(r) {
-  return [r.brand, r.generalName, r.model, r.color]
+  return [r.model, r.brand, r.generalName, r.color]
     .map(v => (v || '').trim()).filter(Boolean).join(' ')
 }
 function displayName(r) { return r.nameOverride.trim() || autoName(r) }
@@ -426,7 +429,19 @@ async function printDoc(id, perItem = true) {
 // model boshida bo'ladi. `productName` saqlangan paytdagi nom, eski
 // hujjatlarda modelsiz qolgan bo'lishi mumkin.
 function itemName(it) {
-  return (it.currentName || '').trim() || it.productName || ''
+  const base  = (it.currentName || '').trim() || it.productName || ''
+  const model = (it.productModel || '').trim()
+  if (!model) return base
+
+  // Eski hujjatlarda nom "Brend Nom Model Rang" tartibida saqlangan —
+  // modelni oldinga chiqaramiz, shunda tarix ham yorliq bilan bir xil
+  // ko'rinadi va model takrorlanmaydi.
+  const esc = model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const stripped = base
+    .replace(new RegExp(`(^|\\s)${esc}(?=\\s|$)`, 'i'), ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return `${model} ${stripped}`.trim()
 }
 
 // Chop etilgan belgisini qo'yish / olib tashlash
@@ -664,10 +679,9 @@ function docLabelCount(d) {
               </thead>
               <tbody>
                 <tr v-for="it in openDocItems" :key="it.id" :class="{ 'is-edit': editItemId === it.id }">
-                  <td>
-                    {{ itemName(it) }}
-                    <span v-if="it.productModel" class="qi__hmodel">{{ it.productModel }}</span>
-                  </td>
+                  <!-- Model nom boshida turadi, shuning uchun alohida
+                       belgi qo'yilmaydi — takrorlanib ketardi -->
+                  <td>{{ itemName(it) }}</td>
 
                   <!-- Tannarx: bo'sh qolgan bo'lsa ko'zga tashlanadi -->
                   <td class="ta-r">
@@ -1085,11 +1099,6 @@ function docLabelCount(d) {
 .qi__hitems-tbl td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #0f172a; }
 .qi__hitems-tbl tr:last-child td { border-bottom: none; }
 .qi__hbc { font-size: 11.5px; color: #64748b; font-variant-numeric: tabular-nums; }
-/* Model — nom yonida ajratib ko'rsatiladi */
-.qi__hmodel {
-  margin-left: 6px; padding: 1px 7px; border-radius: 5px;
-  background: #f1f5f9; font-size: 10.5px; font-weight: 700; color: #475569;
-}
 .ta-r { text-align: right; }
 .ta-c { text-align: center; }
 
