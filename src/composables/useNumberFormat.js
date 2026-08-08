@@ -82,12 +82,18 @@ function posAfterDigits(str, count) {
 // esa toza son yozadi. Kursor holati saqlanadi.
 export const vMoney = {
   mounted(el, binding) {
-    const { get, set } = binding.value || {}
-    if (!get || !set) return
+    if (!binding.value?.get || !binding.value?.set) return
+
+    // MUHIM: get/set ni closure'ga olib qo'ymaymiz, `el.__bind` orqali
+    // o'qiymiz. Vue ro'yxatni qayta chizganda (masalan qatorlar tozalanib
+    // yangisi qo'yilganda) shu DOM elementini qayta ishlatishi mumkin —
+    // eski closure esa allaqachon tashlab yuborilgan qatorga yozib,
+    // kiritilgan summa yo'qolib qolardi.
+    el.__bind = binding.value
 
     el.type = 'text'
     el.inputMode = 'decimal'
-    el.value = fmtNum(get())
+    el.value = fmtNum(el.__bind.get())
 
     el.__money = () => {
       const before = el.value
@@ -96,7 +102,7 @@ export const vMoney = {
 
       const formatted = formatWhileTyping(before)
       el.value = formatted
-      set(parseNum(formatted))
+      el.__bind.set(parseNum(formatted))
 
       const newPos = posAfterDigits(formatted, dCount)
       requestAnimationFrame(() => {
@@ -104,22 +110,24 @@ export const vMoney = {
       })
     }
 
-    el.__moneyBlur = () => { el.value = fmtNum(get()) }
+    el.__moneyBlur = () => { el.value = fmtNum(el.__bind.get()) }
 
     el.addEventListener('input', el.__money)
     el.addEventListener('blur',  el.__moneyBlur)
   },
 
   updated(el, binding) {
-    const { get } = binding.value || {}
-    if (!get) return
+    if (!binding.value?.get || !binding.value?.set) return
+    // Yangi qatorga bog'landi — get/set ni almashtiramiz
+    el.__bind = binding.value
     // Tashqaridan o'zgargan bo'lsa yangilaymiz (foydalanuvchi yozayotgan
     // paytdan tashqari — aks holda kursor sakraydi)
-    if (document.activeElement !== el) el.value = fmtNum(get())
+    if (document.activeElement !== el) el.value = fmtNum(el.__bind.get())
   },
 
   unmounted(el) {
     el.removeEventListener('input', el.__money)
     el.removeEventListener('blur',  el.__moneyBlur)
+    el.__bind = null
   },
 }

@@ -93,6 +93,12 @@ export const productsApi = {
     return res.data
   },
 
+  // Bazada allaqachon ishlatilgan brendlar — kiritishda taklif uchun
+  async getBrands() {
+    const res = await http.get('/products/brands')
+    return res.data
+  },
+
   async create(form) {
     const res = await http.post('/products', toBackend(form))
     return toFrontend(res.data)

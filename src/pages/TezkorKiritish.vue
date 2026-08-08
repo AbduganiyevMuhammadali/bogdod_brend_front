@@ -17,10 +17,11 @@ import { purchasesApi } from '@/api/purchases.js'
 import { genBarcode, printLabels58x40, getLabelSize, setLabelSize } from '@/composables/useBarcodePrint.js'
 import { showToast } from '@/composables/useToast.js'
 import { fmtDate, fmtTime } from '@/composables/useDateTime.js'
+import { getRecent, rememberValues } from '@/composables/useRecentValues.js'
 
 // Ro'yxatlar mahsulot formasi bilan bir xil bo'lishi uchun bitta manbadan
 import {
-  UNITS, GROUPS, COUNTRIES, BRANDS, COLORS,
+  UNITS, GROUPS, COUNTRIES, COLORS,
   SIZE_ALPHA, SIZE_JEANS, SIZE_EVEN, SIZE_CLASSIC, SIZE_SHOES,
 } from '@/constants/catalog.js'
 
@@ -31,8 +32,15 @@ const allSizeChips = [
     .sort((a, b) => Number(a) - Number(b))),
 ]
 
+// Har qatorga takrorlanmas kalit. Indeks bo'yicha kalit ishlatib
+// bo'lmaydi: saqlagandan keyin qatorlar almashsa ham indeks 0 bo'lib
+// qolgani uchun Vue eski input'ni qayta ishlatardi va kiritilgan narx
+// tashlab yuborilgan qatorga yozilib, "summa kiritilmagan" xatosi chiqardi.
+let rowSeq = 0
+
 function blankRow() {
   return {
+    _id: ++rowSeq,
     generalName: '', brand: '', model: '', color: '',
     unit: 'Dona', group: '', country: '',
     costPrice: '', retailPrice: '', wholesalePrice: '',
@@ -50,8 +58,30 @@ const suppliers = ref([])
 const supplierId = ref(null)
 const savedCount = ref(0)
 
+// Brend takliflari — tayyor ro'yxat emas, do'konning o'z brendlari.
+// Ikki manbadan yig'iladi: shu kompyuterda yozilganlar (localStorage) va
+// bazada allaqachon mavjud bo'lganlar. Takrorlanmasligi uchun birlashtiramiz.
+const brandOptions = ref(getRecent('brand'))
+
+async function loadBrands() {
+  const local = getRecent('brand')
+  let server = []
+  try { server = await productsApi.getBrands() } catch { /* ixtiyoriy */ }
+
+  const seen = new Set()
+  const out  = []
+  for (const b of [...local, ...server]) {
+    const k = String(b || '').trim().toLowerCase()
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(b)
+  }
+  brandOptions.value = out
+}
+
 onMounted(async () => {
   try { suppliers.value = await suppliersApi.getAll() } catch { /* ixtiyoriy */ }
+  loadBrands()
 })
 
 // ── Nom yasash — ProductFormModal.buildName() bilan bir xil tartib ──────
@@ -81,6 +111,7 @@ async function duplicateRow(i) {
   const src = rows.value[i]
   const copy = {
     ...src,
+    _id: ++rowSeq,           // kalit takrorlanmasin
     barcode: src.barcode ? genBarcode() : '',
     sizes: src.sizes.map(s => ({ ...s, barcode: genBarcode() })),
   }
@@ -210,6 +241,10 @@ async function save() {
         })
       }
     })
+
+    // Kiritilgan brendlarni eslab qolamiz — keyingi safar taklif bo'ladi
+    rememberValues('brand', list.map(r => r.brand))
+    loadBrands()
 
     showToast(`${res.yaratildi} ta mahsulot saqlandi`, 'ok')
     history.value = []          // keyingi ochilishda qaytadan yuklansin
@@ -662,7 +697,7 @@ function docLabelCount(d) {
           </tr>
         </thead>
         <tbody>
-          <template v-for="(r, i) in rows" :key="i">
+          <template v-for="(r, i) in rows" :key="r._id">
             <tr :class="{ 'is-filled': displayName(r).trim() }">
               <td class="c-num">{{ i + 1 }}</td>
 
@@ -814,7 +849,7 @@ function docLabelCount(d) {
       </table>
     </div>
 
-    <datalist id="qi-brands"><option v-for="b in BRANDS" :key="b" :value="b" /></datalist>
+    <datalist id="qi-brands"><option v-for="b in brandOptions" :key="b" :value="b" /></datalist>
     <datalist id="qi-colors"><option v-for="c in COLORS" :key="c" :value="c" /></datalist>
     <datalist id="qi-groups"><option v-for="g in GROUPS" :key="g" :value="g" /></datalist>
     <datalist id="qi-countries"><option v-for="c in COUNTRIES" :key="c" :value="c" /></datalist>
