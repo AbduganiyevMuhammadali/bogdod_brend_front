@@ -66,6 +66,9 @@ function toFront(p) {
     discount:     Number(p.discount)      || 0,
     exchangeRate: Number(p.exchange_rate) || 11000,
     comment:      p.comment       ?? '',
+    // Hujjatni kim yaratgan — tezkor kiritish tarixida ko'rsatiladi
+    createdBy:    p.created_by     ?? null,
+    creatorName:  p.creator ? (p.creator.fullname || p.creator.username || '') : '',
     status:       p.status        ?? 'draft',
     totalSum:     Number(p.total_sum) || 0,
     totalUsd:     Number(p.total_usd) || 0,

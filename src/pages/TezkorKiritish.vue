@@ -247,7 +247,10 @@ async function save() {
     loadBrands()
 
     showToast(`${res.yaratildi} ta mahsulot saqlandi`, 'ok')
-    history.value = []          // keyingi ochilishda qaytadan yuklansin
+    // Tarix eskirdi — keyingi ochilishda qaytadan yuklansin
+    history.value = []
+    histTotal.value = 0
+    histPage.value = 1
     rows.value = [blankRow()]
     await nextTick()
     document.querySelector('[data-cell="name-0"]')?.focus()
@@ -329,13 +332,27 @@ const openDocId   = ref(null)
 const openDocItems = ref([])
 const docBusy     = ref(false)
 
-async function loadHistory() {
+// Tarix sahifama-sahifa yuklanadi. Ilgari 100 ta hujjat birdan olinib,
+// keraksizlari brauzerda tashlanardi — hujjat 200 dan oshgach bu sezilarli
+// kechikish berardi. Endi filtr backendda va bir marta 30 tadan keladi.
+const HIST_PAGE = 30
+const histPage  = ref(1)
+const histTotal = ref(0)
+const histMore  = computed(() => history.value.length < histTotal.value)
+
+async function loadHistory(append = false) {
   historyBusy.value = true
   try {
-    const res = await purchasesApi.getAll({ limit: 100 })
+    const page = append ? histPage.value + 1 : 1
+    const res = await purchasesApi.getAll({
+      comment: 'Boshlang\'ich qoldiq',   // filtr backendda
+      limit:   HIST_PAGE,
+      page,
+    })
     const list = Array.isArray(res) ? res : (res.rows || res.data || [])
-    // Faqat tezkor kiritish orqali yaratilganlari
-    history.value = list.filter(d => (d.comment || '').includes('Boshlang\'ich qoldiq'))
+    history.value  = append ? [...history.value, ...list] : list
+    histTotal.value = res.total ?? list.length
+    histPage.value  = page
   } catch (e) {
     showToast('Tarixni yuklab bo\'lmadi', 'err')
   } finally {
@@ -515,7 +532,7 @@ function docLabelCount(d) {
       </button>
       <button class="qi__tab" :class="{ on: tab === 'tarix' }" @click="switchTab('tarix')">
         <AppIcon name="archive" :size="14" /> Tarix
-        <span v-if="history.length" class="qi__tab-badge">{{ history.length }}</span>
+        <span v-if="histTotal" class="qi__tab-badge">{{ histTotal }}</span>
       </button>
     </div>
 
@@ -543,7 +560,14 @@ function docLabelCount(d) {
               <span class="qi__hdoc">#{{ d.docNumber }}</span>
               <div>
                 <div class="qi__hdate">{{ fmtDate(d.date) }} <em>{{ fmtTime(d.date) }}</em></div>
-                <div class="qi__hsub">{{ d.supplier || 'Boshlang\'ich qoldiq' }}</div>
+                <!-- Kim kiritgani oldinda turadi — kim nima kiritganini
+                     tarixdan darhol ko'rish uchun -->
+                <div class="qi__hsub">
+                  <span v-if="d.creatorName" class="qi__hwho">
+                    <AppIcon name="user" :size="11" /> {{ d.creatorName }}
+                  </span>
+                  {{ d.supplier || 'Boshlang\'ich qoldiq' }}
+                </div>
               </div>
             </div>
             <div class="qi__hcard-r">
@@ -635,6 +659,14 @@ function docLabelCount(d) {
             <div v-else class="qi__empty qi__empty--sm">Bu hujjatda mahsulot yo'q.</div>
           </div>
         </div>
+
+        <!-- Qolganini talab bo'yicha yuklaymiz — hammasi birdan kelsa
+             hujjat ko'payganda sahifa sekinlashadi -->
+        <button v-if="histMore" class="qi__hmore" :disabled="historyBusy" @click="loadHistory(true)">
+          <span v-if="historyBusy" class="qi__spin qi__spin--dark"></span>
+          <AppIcon v-else name="chevron-down" :size="14" />
+          {{ historyBusy ? 'Yuklanmoqda...' : `Yana yuklash (${histTotal - history.length} ta qoldi)` }}
+        </button>
       </div>
     </div>
 
@@ -939,6 +971,23 @@ function docLabelCount(d) {
 .qi__hdate { font-size: 13px; font-weight: 600; color: #0f172a; }
 .qi__hdate em { font-style: normal; font-weight: 400; color: #94a3b8; font-size: 12px; }
 .qi__hsub { font-size: 11.5px; color: #94a3b8; margin-top: 1px; }
+/* Kim kiritgani — ko'zga tashlanib tursin */
+.qi__hwho {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-right: 6px; padding: 1px 7px;
+  border-radius: 5px; background: #eef2ff; color: #4f46e5; font-weight: 600;
+}
+
+/* "Yana yuklash" */
+.qi__hmore {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  width: 100%; margin-top: 8px; padding: 11px;
+  border: 1px dashed #cbd5e1; border-radius: 10px; background: #fff;
+  font-size: 12.5px; font-weight: 500; color: #475569; cursor: pointer;
+}
+.qi__hmore:hover:not(:disabled) { border-color: #8b5cf6; color: #7c42eb; background: #faf5ff; }
+.qi__hmore:disabled { opacity: .6; cursor: default; }
+.qi__spin--dark { border-color: rgba(124,66,235,.3); border-top-color: #7c42eb; }
 .qi__hcard-r { display: flex; align-items: center; gap: 10px; }
 .qi__hcount { font-size: 12px; color: #64748b; white-space: nowrap; }
 .qi__hchev { color: #94a3b8; }
