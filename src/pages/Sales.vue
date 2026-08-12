@@ -61,49 +61,86 @@ const showOutOfStock = ref(false)
 // Har chaqiruvga raqam beramiz va faqat eng oxirgisini qabul qilamiz.
 let loadSeq = 0
 
-async function loadProducts(q = '') {
+// Sotuv sahifasi ham sahifalab yuklaydi: bir necha ming tovarda butun
+// ro'yxatni tortish kartochkalarni chizishda sezilarli kechikish berardi.
+// Qidiruv va kategoriya serverda filtrlanadi, shuning uchun kerakli tovar
+// birinchi sahifadayoq topiladi.
+const PROD_PAGE       = 120
+const prodPage        = ref(1)
+const prodHasMore     = ref(false)
+const prodLoadingMore = ref(false)
+
+// Ekrandagi tovarlar uchun FIFO narxini so'rab, ro'yxatdagi narxlarni
+// aniqlashtiradi. Faqat yangi kelgan tovarlar so'raladi.
+async function applyFifo(list, seq) {
+  if (!list.length) return
+  const fifoMap = await purchasesApi
+    .getFifoPrices(list.map(p => p.id))
+    .catch(() => ({}))
+  if (seq !== loadSeq) return
+
+  products.value = products.value.map(p => {
+    const fifo = fifoMap[p.id]
+    if (!fifo) return p
+    return {
+      ...p,
+      retailPrice:    fifo.retailPrice    || p.retailPrice,
+      wholesalePrice: fifo.wholesalePrice || p.wholesalePrice,
+    }
+  })
+}
+
+async function loadProducts(q = '', { append = false } = {}) {
   const seq = ++loadSeq
-  prodLoading.value = true
+  if (append) prodLoadingMore.value = true
+  else        { prodLoading.value = true; prodPage.value = 1 }
+
   try {
-    const params = { limit: 200 }
+    const params = { limit: PROD_PAGE, page: prodPage.value }
     if (q.trim()) params.search = q.trim()
     if (activeCategory.value !== 'all') params.category = activeCategory.value
+    // Qoldiq filtri serverda bajariladi — brauzerda filtrlansa sahifadagi
+    // tovarlarning bir qismi yo'qolib, ro'yxat kam bo'lib ko'rinardi
+    if (!showOutOfStock.value) params.in_stock = 1
 
     const res = await productsApi.getAll(params)
     if (seq !== loadSeq) return          // eskirgan javob — tashlab yuboramiz
 
-    const data = showOutOfStock.value
-      ? res.data
-      : res.data.filter(p => Number(p.qty) > 0)
-
     // Mahsulotlarni darhol ko'rsatamiz — narxlar keyin aniqlashtiriladi.
     // Shunda ekran FIFO so'rovini kutib turmaydi.
-    products.value = data
+    products.value = append ? [...products.value, ...res.data] : res.data
+    prodHasMore.value = res.hasMore
 
-    // FIFO narxi faqat ekranda turgan tovarlar uchun so'raladi. Ilgari
-    // butun bazadagi partiyalar tortilardi va mahsulot ko'paygan sari
-    // sotuv sahifasi sekinlashardi.
-    if (!data.length) return
-    const fifoMap = await purchasesApi
-      .getFifoPrices(data.map(p => p.id))
-      .catch(() => ({}))
-    if (seq !== loadSeq) return
-
-    products.value = data.map(p => {
-      const fifo = fifoMap[p.id]
-      if (!fifo) return p
-      return {
-        ...p,
-        retailPrice:    fifo.retailPrice    || p.retailPrice,
-        wholesalePrice: fifo.wholesalePrice || p.wholesalePrice,
-      }
-    })
+    await applyFifo(res.data, seq)
   } catch {
-    if (seq === loadSeq) products.value = []
+    if (seq === loadSeq && !append) products.value = []
   } finally {
-    if (seq === loadSeq) prodLoading.value = false
+    if (seq === loadSeq) { prodLoading.value = false; prodLoadingMore.value = false }
   }
 }
+
+async function loadMoreProducts() {
+  if (prodLoadingMore.value || prodLoading.value || !prodHasMore.value) return
+  prodPage.value += 1
+  await loadProducts(searchQ.value, { append: true })
+}
+
+// Ro'yxat oxiridagi element ko'ringanda keyingi sahifa so'raladi.
+// Grid `.cat__grid-wrap` ichida scroll bo'ladi — shuning uchun root
+// sifatida o'sha konteyner beriladi, aks holda viewport bo'yicha
+// hisoblanib, element hech qachon "ko'rindi" deb topilmasligi mumkin.
+const prodSentinel = ref(null)
+let prodObserver = null
+watch(prodSentinel, (el) => {
+  prodObserver?.disconnect()
+  if (!el) return
+  prodObserver = new IntersectionObserver(
+    entries => { if (entries[0].isIntersecting) loadMoreProducts() },
+    { root: el.closest('.cat__grid-wrap') || null, rootMargin: '400px' }
+  )
+  prodObserver.observe(el)
+})
+onUnmounted(() => prodObserver?.disconnect())
 
 watch(showOutOfStock, () => loadProducts(searchQ.value))
 
@@ -892,6 +929,12 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
               </div>
             </div>
           </button>
+        </div>
+
+        <!-- Cheksiz scroll: ko'ringanda keyingi sahifa yuklanadi -->
+        <div v-if="prodHasMore && !prodLoading" ref="prodSentinel" class="cat__more">
+          <span v-if="prodLoadingMore" class="cat__more-txt">Yuklanmoqda…</span>
+          <button v-else class="cat__more-btn" @click="loadMoreProducts">Yana yuklash</button>
         </div>
       </div>
     </div>
@@ -2104,6 +2147,10 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 /* ── Product grid ────────────────────────────────────────── */
 .cat__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(156px,1fr));gap:10px}
 .cat__empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:60px;color:#94a3b8}
+.cat__more{display:flex;justify-content:center;align-items:center;padding:16px;min-height:52px}
+.cat__more-txt{font-size:13px;color:#64748b}
+.cat__more-btn{padding:8px 20px;font-size:13px;font-weight:600;color:#334155;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer}
+.cat__more-btn:hover{background:#e2e8f0}
 .prod-skel{height:182px;border-radius:16px}
 
 /* ── Product card ────────────────────────────────────────── */

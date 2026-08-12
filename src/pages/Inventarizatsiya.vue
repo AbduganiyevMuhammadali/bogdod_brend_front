@@ -10,7 +10,7 @@
 //
 // Skaner klaviatura emulyatsiyasida ishlaydi: kod tez teriladi va Enter
 // bilan tugaydi. Shuning uchun input doim fokusda turishi kerak.
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { inventoriesApi } from '@/api/inventories.js'
 import { beep } from '@/composables/useBeep.js'
@@ -164,11 +164,36 @@ const extra = computed(() =>
   (doc.value?.items || []).filter(i => i.countedQty > i.expectedQty)
 )
 
-const visibleItems = computed(() => {
+const currentList = computed(() => {
   if (tab.value === 'found')  return found.value
   if (tab.value === 'extra')  return extra.value
   return notFound.value
 })
+
+// ── Ro'yxatni qidirish va bo'lib chizish ──────────────────────────────
+// Omborda bir necha ming tovar bo'lganda barcha satrni bir yo'la chizish
+// sahifani qotiradi (2000 <tr> — har biri inputli). Shuning uchun bir
+// martada faqat CHUNK ta satr chiziladi, qolgani "yana ko'rsatish" bilan
+// qo'shiladi. Qidiruv esa kerakli tovarni darhol topish uchun.
+const CHUNK = 200
+const itemQ   = ref('')
+const shown   = ref(CHUNK)
+
+// Tab yoki qidiruv o'zgarsa, ro'yxat boshidan chiziladi
+watch([tab, itemQ], () => { shown.value = CHUNK })
+
+const matchedItems = computed(() => {
+  const q = itemQ.value.trim().toLowerCase()
+  if (!q) return currentList.value
+  return currentList.value.filter(i =>
+    (i.productName || '').toLowerCase().includes(q) ||
+    (i.barcode     || '').toLowerCase().includes(q)
+  )
+})
+
+const visibleItems = computed(() => matchedItems.value.slice(0, shown.value))
+const hasMoreItems = computed(() => matchedItems.value.length > shown.value)
+function showMoreItems() { shown.value += CHUNK }
 
 const progress = computed(() => {
   const total = doc.value?.items?.length || 0
@@ -199,8 +224,61 @@ async function removeItem(item) {
 }
 
 // ── Yakunlash ──────────────────────────────────────────────────────────
+// Yakunlashni qaytarish — sanoq tugallanmagan holda "Tugatish" bosilib,
+// qoldiqlar nolga tushib qolgan bo'lsa ishlatiladi.
+//
+// Hujjatni O'CHIRISH bu ishni qilmaydi: o'chirish `inventory_item` ni ham
+// o'chiradi, eski qoldiqlar esa aynan o'sha yerda (`expected_qty`) saqlanadi.
+// Shuning uchun o'chirish emas, qaytarish kerak.
+async function rollbackDoc() {
+  const msg =
+    `Yakunlash qaytarilsinmi?\n\n` +
+    `Barcha tovarlarning qoldig'i hujjat ochilgan paytdagi holatga ` +
+    `qaytariladi (${fmtQ(doc.value.totalExpected)} dona).\n\n` +
+    `Yakunlashdan keyin sotuv bo'lgan bo'lsa, u hisobga olinadi — ` +
+    `sotuvlar bekor qilinmaydi.\n\n` +
+    `Hujjat qayta ochiladi va sanoqni davom ettirish mumkin bo'ladi.`
+  if (!confirm(msg)) return
+
+  busy.value = true
+  try {
+    const r = await inventoriesApi.rollback(doc.value.id)
+    showToast(r.xabar || 'Qoldiqlar qaytarildi', 'ok')
+    doc.value = await inventoriesApi.getById(doc.value.id)
+    tab.value = 'notfound'
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'Qaytarishda xatolik', 'err')
+  } finally {
+    busy.value = false
+  }
+}
+
 async function finishDoc() {
   const nf = notFound.value.length, ex = extra.value.length
+  const scanned = found.value.length + ex
+
+  // Skanerlanmagan tovarning qoldig'i 0 ga tushadi. Sanoq tugallanmagan
+  // holda yakunlash — omborni butunlay nolga tushirish demak, shuning
+  // uchun oddiy "OK" bilan o'tkazib yubormaymiz: nechta tovar nolga
+  // tushishini aniq aytamiz va tasdiqni qo'lda yozdiramiz.
+  if (nf > 0) {
+    const zeroing = notFound.value.filter(i => Number(i.countedQty) === 0).length
+    const ogoh =
+      `DIQQAT — SANOQ TUGALLANMAGAN!\n\n` +
+      `Skanerlangan: ${scanned} ta\n` +
+      `Skanerlanmagan: ${nf} ta\n\n` +
+      `Yakunlasangiz, skanerlanmagan ${zeroing} ta tovarning qoldig'i ` +
+      `0 GA TUSHADI va ombor ma'lumoti yo'qoladi.\n\n` +
+      `Agar sanoqni tugatmagan bo'lsangiz — BEKOR QILING.\n\n` +
+      `Davom etish uchun quyiga "TASDIQLAYMAN" deb yozing:`
+    const javob = prompt(ogoh)
+    if (javob === null) return
+    if (javob.trim().toUpperCase() !== 'TASDIQLAYMAN') {
+      showToast('Yakunlash bekor qilindi', 'err')
+      return
+    }
+  }
+
   const msg =
     `Inventarizatsiya yakunlansinmi?\n\n` +
     `Topildi: ${found.value.length}\n` +
@@ -313,6 +391,11 @@ async function deleteDoc(id) {
                 class="inv__btn inv__btn--primary" :disabled="busy" @click="finishDoc">
           <AppIcon name="check-circle" :size="15" /> Tugatish
         </button>
+        <!-- Noto'g'ri yakunlangan sanoqni qaytarish -->
+        <button v-else-if="doc.status === 'finished' && canEdit('products')"
+                class="inv__btn inv__btn--undo" :disabled="busy" @click="rollbackDoc">
+          <AppIcon name="rotate-ccw" :size="15" /> Yakunlashni qaytarish
+        </button>
       </div>
 
       <!-- Statistika: sanoq holati bir qarashda ko'rinadi -->
@@ -387,9 +470,25 @@ async function deleteDoc(id) {
         </button>
       </div>
 
+      <!-- Ro'yxat ichidan qidirish: ming satrli ro'yxatda kerakli tovarni
+           scroll qilib izlamaslik uchun -->
+      <div v-if="currentList.length > 20" class="inv__find">
+        <AppIcon name="search" :size="13" class="inv__find-ico" />
+        <input
+          v-model="itemQ"
+          class="inv__find-inp"
+          type="text"
+          placeholder="Ro'yxat ichidan qidirish (nom yoki shtrix-kod)…"
+        />
+        <button v-if="itemQ" class="inv__find-clr" @click="itemQ = ''">
+          <AppIcon name="x" :size="11" :stroke-width="2.5" />
+        </button>
+      </div>
+
       <div v-if="!visibleItems.length" class="inv__empty inv__empty--sm">
         <AppIcon name="check-circle" :size="32" />
-        <p>{{ tab === 'notfound' ? 'Hammasi topildi' : 'Bu ro\'yxat bo\'sh' }}</p>
+        <p v-if="itemQ">Qidiruv bo'yicha topilmadi</p>
+        <p v-else>{{ tab === 'notfound' ? 'Hammasi topildi' : 'Bu ro\'yxat bo\'sh' }}</p>
       </div>
 
       <table v-else class="inv__table">
@@ -429,6 +528,14 @@ async function deleteDoc(id) {
           </tr>
         </tbody>
       </table>
+
+      <!-- Ro'yxat bo'lib chiziladi — qolganini shu tugma qo'shadi -->
+      <div v-if="hasMoreItems" class="inv__more">
+        <span class="inv__more-txt">
+          {{ visibleItems.length }} / {{ matchedItems.length }} ta satr
+        </span>
+        <button class="inv__more-btn" @click="showMoreItems">Yana ko'rsatish</button>
+      </div>
 
       <!-- Yakunlangan hujjat xulosasi -->
       <div v-if="doc.status === 'finished'" class="summary">
@@ -486,6 +593,12 @@ async function deleteDoc(id) {
   background: linear-gradient(135deg, #6366f1, #4f46e5);
   border-color: transparent; color: #fff;
   box-shadow: 0 2px 8px rgba(79,70,229,.28);
+}
+/* Yakunlashni qaytarish — ogohlantiruvchi rang, tasodifan bosilmasin */
+.inv__btn--undo {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: transparent; color: #fff;
+  box-shadow: 0 2px 8px rgba(217,119,6,.28);
 }
 .inv__btn--primary:hover:not(:disabled) {
   box-shadow: 0 4px 14px rgba(79,70,229,.36); transform: translateY(-1px);
@@ -649,6 +762,46 @@ async function deleteDoc(id) {
 .tabs__n--warn { background: #ffedd5; color: #c2410c; }
 
 /* ── Jadval ───────────────────────────────────────────────────── */
+/* Ro'yxat ichidan qidirish */
+.inv__find {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 0 10px;
+}
+.inv__find-ico { position: absolute; left: 11px; color: #94a3b8; }
+.inv__find-inp {
+  width: 100%;
+  padding: 9px 30px 9px 30px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  outline: none;
+}
+.inv__find-inp:focus { border-color: #94a3b8; }
+.inv__find-clr {
+  position: absolute; right: 9px;
+  display: flex; padding: 3px;
+  color: #94a3b8; background: #f1f5f9;
+  border: none; border-radius: 50%; cursor: pointer;
+}
+
+/* Bo'lib chizish */
+.inv__more {
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  padding: 14px;
+}
+.inv__more-txt { font-size: 12px; color: #64748b; }
+.inv__more-btn {
+  padding: 7px 18px;
+  font-size: 13px; font-weight: 600; color: #334155;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+  border-radius: 8px; cursor: pointer;
+}
+.inv__more-btn:hover { background: #e2e8f0; }
+
 .inv__table {
   width: 100%; border-collapse: collapse; font-size: 13px;
   background: #fff; border-radius: 13px; overflow: hidden;

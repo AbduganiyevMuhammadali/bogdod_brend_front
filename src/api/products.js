@@ -63,9 +63,19 @@ export const productsApi = {
   async getAll(params = {}) {
     const res = await http.get('/products', { params })
     return {
-      total: res.data.total,
-      data:  res.data.data.map(toFrontend),
+      total:   res.data.total,
+      page:    res.data.page,
+      limit:   res.data.limit,
+      // Server yana sahifa borligini aytadi — "yana yuklash" shunga tayanadi
+      hasMore: res.data.has_more ?? false,
+      data:    res.data.data.map(toFrontend),
     }
+  },
+
+  // Sahifa ko'rsatkichlari bazada hisoblanadi — butun ro'yxatni yuklash shart emas
+  async getStats(params = {}) {
+    const res = await http.get('/products/stats', { params })
+    return res.data
   },
 
   async getLowStockCount() {
@@ -90,6 +100,12 @@ export const productsApi = {
 
   async getCategories() {
     const res = await http.get('/products/categories')
+    return res.data
+  },
+
+  // Kategoriya + har biridagi tovar soni (bitta so'rovda)
+  async getCategoryCounts() {
+    const res = await http.get('/products/categories', { params: { with_counts: 1 } })
     return res.data
   },
 

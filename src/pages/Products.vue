@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import AppIcon          from '@/components/AppIcon.vue'
 import ProductFormModal from '@/components/products/ProductFormModal.vue'
 import { productsApi }  from '@/api/products.js'
@@ -7,7 +7,8 @@ import { productsApi }  from '@/api/products.js'
 // ── State ────────────────────────────────────────────────
 const products   = ref([])
 const categories = ref([])
-const loading    = ref(false)
+const loading    = ref(false)     // birinchi sahifa yuklanmoqda
+const loadingMore= ref(false)     // keyingi sahifa yuklanmoqda
 const saving     = ref(false)
 const error      = ref('')
 const totalCount = ref(0)   // serverdagi jami soni
@@ -16,61 +17,115 @@ const search    = ref('')
 const filterCat = ref('all')
 const showForm  = ref(false)
 const editing   = ref(null)
+// Kam zaxira filtri serverda qo'llanadi (butun baza bo'yicha), shuning
+// uchun u so'rov parametri sifatida yuboriladi
+const showLowStockOnly = ref(false)
 
-// ── Load ─────────────────────────────────────────────────
-async function loadProducts() {
-  loading.value = true
-  error.value   = ''
+// ── Sahifalash ───────────────────────────────────────────
+// Do'konda bir necha ming tovar bo'lgani uchun ro'yxat butunlay
+// yuklanmaydi: har safar bir sahifa olinadi, pastga tushilganda
+// keyingisi qo'shiladi. Ilgari `limit: 0` bilan hammasi bir yo'la
+// kelardi va sahifa ochilishida bir necha soniya qotib turardi.
+const PAGE_SIZE = 100
+const page      = ref(1)
+const hasMore   = ref(false)
+
+// Ketma-ket so'rovda eski javob keyin kelib ro'yxatni buzmasligi uchun
+let loadSeq = 0
+
+async function loadProducts({ append = false } = {}) {
+  const seq = ++loadSeq
+  if (append) loadingMore.value = true
+  else        { loading.value = true; page.value = 1 }
+  error.value = ''
+
   try {
-    const params = {}
-    if (filterCat.value !== 'all') params.category = filterCat.value
+    const params = { page: page.value, limit: PAGE_SIZE }
+    if (filterCat.value !== 'all') params.category  = filterCat.value
     if (search.value.trim())       params.search    = search.value.trim()
+    if (showLowStockOnly.value)    params.low_stock = 1
 
-    // limit=0 — hammasini qaytaradi. Ilgari backend 200 ta bilan
-    // cheklab qo'yardi va qolgan mahsulotlar ro'yxatda ko'rinmasdi.
-    const res = await productsApi.getAll({ ...params, limit: 0 })
-    products.value = res.data
-    totalCount.value = res.total ?? res.data.length
+    const res = await productsApi.getAll(params)
+    if (seq !== loadSeq) return        // eskirgan javob
+
+    if (append) products.value = [...products.value, ...res.data]
+    else       products.value = res.data
+
+    hasMore.value = res.hasMore
+    if (res.total != null) totalCount.value = res.total
   } catch (e) {
-    error.value = e.response?.data?.message ?? "Serverga ulanib bo'lmadi"
+    if (seq === loadSeq) error.value = e.response?.data?.message ?? "Serverga ulanib bo'lmadi"
   } finally {
-    loading.value = false
+    if (seq === loadSeq) { loading.value = false; loadingMore.value = false }
   }
 }
 
+async function loadMore() {
+  if (loadingMore.value || loading.value || !hasMore.value) return
+  page.value += 1
+  await loadProducts({ append: true })
+}
+
+// Kategoriyalar va ulardagi tovar soni bitta so'rovda keladi — sanoq
+// uchun butun ro'yxatni brauzerga tortish shart emas.
+const catCounts = ref({})
 async function loadCategories() {
   try {
-    const cats = await productsApi.getCategories()
-    categories.value = cats.filter(Boolean)
+    const rows = await productsApi.getCategoryCounts()
+    categories.value = rows.map(r => r.category).filter(Boolean)
+    catCounts.value  = Object.fromEntries(rows.map(r => [r.category, r.count]))
   } catch { /* ignore */ }
 }
 
+// Ko'rsatkichlar bazada hisoblanadi — ular yuklangan sahifaga bog'liq emas
+const stats = ref({ total: 0, lowStock: 0, cats: 0, stockValue: 0 })
+async function loadStats() {
+  try {
+    const params = {}
+    if (filterCat.value !== 'all') params.category = filterCat.value
+    stats.value = await productsApi.getStats(params)
+  } catch { /* ixtiyoriy */ }
+}
+
 onMounted(async () => {
-  await loadProducts()
-  await loadCategories()
+  await Promise.all([loadProducts(), loadCategories(), loadStats()])
 })
 
 // Re-fetch when filter/search changes (debounced)
 let searchTimer = null
 watch(search, () => {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(loadProducts, 350)
+  searchTimer = setTimeout(() => loadProducts(), 350)
 })
-watch(filterCat, loadProducts)
+watch(filterCat, () => { loadProducts(); loadStats() })
+watch(showLowStockOnly, () => loadProducts())
 
-// ── Stats ─────────────────────────────────────────────────
-const stats = computed(() => ({
-  total:    totalCount.value || products.value.length,
-  lowStock: products.value.filter(p => p.qty <= p.minQty).length,
-  cats:     categories.value.length,
-  revenue:  products.value.reduce((s, p) => s + p.retailPrice, 0),
-}))
+// ── Cheksiz scroll ────────────────────────────────────────
+// Ro'yxat oxiridagi ko'rinmas element ekranga kirganda keyingi sahifa
+// so'raladi. Scroll hodisasini tinglashdan ko'ra arzon.
+const sentinel = ref(null)
+let observer = null
+
+watch(sentinel, (el) => {
+  observer?.disconnect()
+  if (!el) return
+  // Jadval `.prod-page__table-wrap` ichida scroll bo'ladi — root sifatida
+  // o'sha konteyner beriladi, aks holda viewport bo'yicha hisoblanib
+  // element "ko'rindi" deb topilmasligi mumkin.
+  observer = new IntersectionObserver(
+    entries => { if (entries[0].isIntersecting) loadMore() },
+    {
+      root: el.closest('.prod-page__table-wrap') || null,
+      rootMargin: '400px',   // oldinroq yuklab qo'yamiz, uzilish sezilmasin
+    }
+  )
+  observer.observe(el)
+})
+onUnmounted(() => observer?.disconnect())
 
 // ── View toggle ───────────────────────────────────────────
-const showLowStockOnly = ref(false)
-const filteredView = computed(() =>
-  showLowStockOnly.value ? products.value.filter(p => p.qty <= p.minQty) : products.value
-)
+// Filtrlash serverda bo'lgani uchun bu yerda qo'shimcha saralash kerak emas
+const filteredView = computed(() => products.value)
 
 // Product avatar colors
 const AVATAR_COLORS = [
@@ -93,8 +148,8 @@ function catLabel(c) {
 }
 
 function catCount(c) {
-  if (c === 'all') return products.value.length
-  return products.value.filter(p => p.category === c).length
+  if (c === 'all') return stats.value.total
+  return catCounts.value[c] ?? 0
 }
 
 // ── CRUD ──────────────────────────────────────────────────
@@ -143,7 +198,10 @@ async function onSave(data) {
       const created = await productsApi.create(data)
       products.value.unshift(created)
     }
+    // Ko'rsatkichlar va kategoriya sanoqlari serverda hisoblanadi —
+    // yangi tovardan keyin ular eskirmasligi uchun qayta so'raymiz
     loadCategories()
+    loadStats()
     showForm.value = false
     editing.value  = null
   } catch (e) {
@@ -158,6 +216,9 @@ async function onDelete(id) {
   try {
     await productsApi.remove(id)
     products.value = products.value.filter(p => p.id !== id)
+    totalCount.value = Math.max(0, totalCount.value - 1)
+    loadStats()
+    loadCategories()
   } catch (e) {
     alert(e.response?.data?.message ?? "O'chirishda xatolik")
   }
@@ -235,8 +296,8 @@ function stockStatus(p) {
           <AppIcon name="trending-up" :size="15" :stroke-width="2" />
         </div>
         <div>
-          <p class="pstat__val">{{ fmt(stats.revenue) }}</p>
-          <p class="pstat__lbl">Jami narx</p>
+          <p class="pstat__val">{{ fmt(stats.stockValue) }}</p>
+          <p class="pstat__lbl">Ombor qiymati</p>
         </div>
       </div>
     </div>
@@ -348,11 +409,17 @@ function stockStatus(p) {
           </tr>
         </tbody>
       </table>
+
+      <!-- Cheksiz scroll: bu element ko'ringanda keyingi sahifa yuklanadi -->
+      <div v-if="hasMore && !loading" ref="sentinel" class="prod-page__sentinel">
+        <span v-if="loadingMore" class="prod-page__more-txt">Yuklanmoqda…</span>
+        <button v-else class="prod-page__more-btn" @click="loadMore">Yana yuklash</button>
+      </div>
     </div>
 
     <!-- Footer -->
     <div v-if="filteredView.length > 0 && !loading" class="prod-page__footer">
-      {{ filteredView.length }} ta mahsulot ko'rsatilmoqda
+      {{ filteredView.length }} / {{ totalCount }} ta mahsulot ko'rsatilmoqda
     </div>
 
     <Teleport to="body">
@@ -368,6 +435,30 @@ function stockStatus(p) {
 </template>
 
 <style scoped>
+/* Cheksiz scroll belgisi */
+.prod-page__sentinel {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  min-height: 52px;
+}
+.prod-page__more-txt {
+  font-size: 13px;
+  color: #64748b;
+}
+.prod-page__more-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.prod-page__more-btn:hover { background: #e2e8f0; }
+
 .prod-page {
   display: flex;
   flex-direction: column;

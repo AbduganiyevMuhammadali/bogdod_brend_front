@@ -84,6 +84,13 @@ export const inventoriesApi = {
     await http.post(`/inventories/${id}/cancel`)
   },
 
+  // Yakunlashni qaytarish — noto'g'ri yakunlangan sanoqdan keyin
+  // qoldiqlarni hujjat ochilgandagi holatga tiklaydi
+  async rollback(id) {
+    const res = await http.post(`/inventories/${id}/rollback`)
+    return res.data
+  },
+
   async remove(id) {
     await http.delete(`/inventories/${id}`)
   },

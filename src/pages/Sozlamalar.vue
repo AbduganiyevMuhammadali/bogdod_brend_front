@@ -1,6 +1,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import { backupApi } from '@/api/backup.js'
+import { showToast } from '@/composables/useToast.js'
 
 const STORAGE_KEY = 'pos_settings'
 
@@ -32,7 +34,44 @@ function saveSettings() {
   setTimeout(() => { saved.value = false }, 2000)
 }
 
-onMounted(loadSettings)
+// ── Zaxira nusxa ──────────────────────────────────────────────────────
+const backupInfo  = reactive({ available: null, sizeMb: null, database: '' })
+const downloading = ref(false)
+const yuklandi    = ref('Yuklanmoqda…')
+
+async function loadBackupInfo() {
+  try {
+    Object.assign(backupInfo, await backupApi.getInfo())
+  } catch {
+    // Huquqi yo'q yoki server eski — tugma baribir ko'rinadi, bosilganda
+    // aniq xato chiqadi
+  }
+}
+
+async function downloadBackup() {
+  if (downloading.value) return
+  downloading.value = true
+  yuklandi.value = 'Yuklanmoqda…'
+  try {
+    const r = await backupApi.download({
+      onProgress: loaded => {
+        const mb = (loaded / 1024 / 1024).toFixed(1)
+        yuklandi.value = `${mb} MB olindi…`
+      },
+    })
+    const mb = (r.size / 1024 / 1024).toFixed(2)
+    showToast(`Zaxira nusxa saqlandi: ${r.name} (${mb} MB)`, 'ok')
+  } catch (e) {
+    showToast(e.message || 'Zaxira nusxa olishda xatolik', 'err')
+  } finally {
+    downloading.value = false
+  }
+}
+
+onMounted(() => {
+  loadSettings()
+  loadBackupInfo()
+})
 
 const SECTIONS = [
   { key: 'store',    label: 'Dokon ma\'lumotlari', icon: 'home'       },
@@ -237,6 +276,37 @@ const activeSection = ref('store')
             </div>
           </div>
 
+          <!-- ── Zaxira nusxa ──────────────────────────────────────── -->
+          <div class="backup">
+            <div class="backup__l">
+              <div class="backup__ico"><AppIcon name="database" :size="18"/></div>
+              <div>
+                <p class="backup__title">Bazadan zaxira nusxa olish</p>
+                <p class="backup__sub">
+                  Bazaning ayni shu paytdagi to'liq nusxasi <code>.sql</code> fayl
+                  bo'lib yuklab olinadi.
+                  <template v-if="backupInfo.sizeMb != null">
+                    Baza hajmi: ~{{ backupInfo.sizeMb }} MB.
+                  </template>
+                  Xavfli amallardan (masalan inventarizatsiyani qaytarish)
+                  oldin albatta nusxa oling.
+                </p>
+              </div>
+            </div>
+            <button
+              class="backup__btn"
+              :disabled="downloading || backupInfo.available === false"
+              @click="downloadBackup"
+            >
+              <AppIcon :name="downloading ? 'loader' : 'download'" :size="15"/>
+              {{ downloading ? yuklandi : 'Zaxira nusxani yuklab olish' }}
+            </button>
+          </div>
+          <p v-if="backupInfo.available === false" class="backup__err">
+            Serverda <code>mysqldump</code> topilmadi. Nusxa olish uchun
+            <code>mysql-client</code> o'rnatilishi kerak.
+          </p>
+
           <!-- Info cards -->
           <div class="info-cards">
             <div class="info-card">
@@ -244,13 +314,6 @@ const activeSection = ref('store')
               <div>
                 <p class="info-card__title">Ma'lumotlar xavfsizligi</p>
                 <p class="info-card__sub">Barcha ma'lumotlar mahalliy serverda saqlanadi</p>
-              </div>
-            </div>
-            <div class="info-card">
-              <div class="info-card__ico info-card__ico--blue"><AppIcon name="database" :size="16"/></div>
-              <div>
-                <p class="info-card__title">Bazadan zaxira nusxa</p>
-                <p class="info-card__sub">Muntazam zaxira nusxa olishni unutmang</p>
               </div>
             </div>
             <div class="info-card">
@@ -314,6 +377,44 @@ select.inp { cursor:pointer; }
 .rp__footer { text-align:center; color:#555; font-size:11px; margin-top:4px; }
 
 /* Info cards */
+/* ── Zaxira nusxa ─────────────────────────────────────────────────── */
+.backup {
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  margin-top:24px; padding:16px 18px;
+  background:linear-gradient(135deg,#eff6ff,#f8fafc);
+  border:1px solid #bfdbfe; border-radius:12px;
+}
+.backup__l { display:flex; align-items:flex-start; gap:13px; }
+.backup__ico {
+  display:flex; align-items:center; justify-content:center;
+  width:38px; height:38px; flex-shrink:0;
+  color:#1d4ed8; background:#dbeafe; border-radius:9px;
+}
+.backup__title { font-size:14px; font-weight:600; color:#0f172a; margin:0 0 3px; }
+.backup__sub   { font-size:12.5px; color:#475569; line-height:1.5; margin:0; max-width:560px; }
+.backup__sub code {
+  padding:1px 5px; font-size:11.5px;
+  background:#e2e8f0; border-radius:4px;
+}
+.backup__btn {
+  display:flex; align-items:center; gap:7px; flex-shrink:0;
+  padding:10px 18px; font-size:13px; font-weight:600; color:#fff;
+  background:linear-gradient(135deg,#3b82f6,#2563eb);
+  border:none; border-radius:9px; cursor:pointer;
+  box-shadow:0 2px 8px rgba(37,99,235,.28);
+}
+.backup__btn:hover:not(:disabled) { filter:brightness(1.06); }
+.backup__btn:disabled { opacity:.6; cursor:not-allowed; }
+/* Yuklanayotganda belgi aylanib tursin */
+.backup__btn:disabled :deep(.app-icon) { animation:backup-spin 1s linear infinite; }
+@keyframes backup-spin { to { transform:rotate(360deg); } }
+.backup__err {
+  margin:10px 0 0; padding:10px 13px;
+  font-size:12.5px; color:#b91c1c;
+  background:#fef2f2; border:1px solid #fecaca; border-radius:9px;
+}
+.backup__err code { padding:1px 5px; background:#fee2e2; border-radius:4px; }
+
 .info-cards { display:flex; flex-direction:column; gap:10px; margin-top:24px; }
 .info-card { display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--color-border); border-radius:var(--r-xl); background:var(--color-surface); }
 .info-card__ico { width:38px; height:38px; border-radius:var(--r-lg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
