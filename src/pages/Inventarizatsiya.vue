@@ -154,14 +154,21 @@ onUnmounted(() => window.removeEventListener('keydown', onGlobalKey))
 // ── Guruhlash: Topilmadi / Topildi / Ortiqcha ──────────────────────────
 const tab = ref('notfound')
 
+// Guruhlash uchta ro'yxatga BO'LINADI va har satr aynan bittasiga tushadi
+// (ilgari `counted=0, expected=0` bo'lgan satrlar hech qaysisiga
+// tushmasdi va jami son to'g'ri kelmasdi).
+//
+//   topilmadi — sanalgani hisobdagidan KAM
+//   topildi   — sanalgani hisobdagiga TENG
+//   ortiqcha  — sanalgani hisobdagidan KO'P
 const notFound = computed(() =>
-  (doc.value?.items || []).filter(i => i.countedQty < i.expectedQty)
+  (doc.value?.items || []).filter(i => Number(i.countedQty) < Number(i.expectedQty))
 )
 const found = computed(() =>
-  (doc.value?.items || []).filter(i => i.countedQty > 0 && i.countedQty === i.expectedQty)
+  (doc.value?.items || []).filter(i => Number(i.countedQty) === Number(i.expectedQty))
 )
 const extra = computed(() =>
-  (doc.value?.items || []).filter(i => i.countedQty > i.expectedQty)
+  (doc.value?.items || []).filter(i => Number(i.countedQty) > Number(i.expectedQty))
 )
 
 const currentList = computed(() => {
@@ -230,6 +237,29 @@ async function removeItem(item) {
 // Hujjatni O'CHIRISH bu ishni qilmaydi: o'chirish `inventory_item` ni ham
 // o'chiradi, eski qoldiqlar esa aynan o'sha yerda (`expected_qty`) saqlanadi.
 // Shuning uchun o'chirish emas, qaytarish kerak.
+// Eski xato tufayli mavjud tovar "ortiqcha" bo'lib qolgan bo'lsa,
+// shu tugma hujjatni qayta tekshiradi: takroriy satrlarni birlashtiradi
+// va skanerlangan miqdorni asosiy satrga qo'shadi.
+async function repairDoc() {
+  if (!confirm(
+    `Hujjat qayta tekshirilsinmi?\n\n` +
+    `Bir tovarga tegishli takroriy satrlar birlashtiriladi va ` +
+    `"ortiqcha" belgisi haqiqiy holatga moslanadi.\n\n` +
+    `Skanerlangan miqdor yo'qolmaydi.`
+  )) return
+
+  busy.value = true
+  try {
+    const r = await inventoriesApi.repair(doc.value.id)
+    doc.value = r.doc
+    showToast(r.xabar || 'Hujjat tuzatildi', 'ok')
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'Tuzatishda xatolik', 'err')
+  } finally {
+    busy.value = false
+  }
+}
+
 async function rollbackDoc() {
   const msg =
     `Yakunlash qaytarilsinmi?\n\n` +
@@ -255,30 +285,10 @@ async function rollbackDoc() {
 
 async function finishDoc() {
   const nf = notFound.value.length, ex = extra.value.length
-  const scanned = found.value.length + ex
 
-  // Skanerlanmagan tovarning qoldig'i 0 ga tushadi. Sanoq tugallanmagan
-  // holda yakunlash — omborni butunlay nolga tushirish demak, shuning
-  // uchun oddiy "OK" bilan o'tkazib yubormaymiz: nechta tovar nolga
-  // tushishini aniq aytamiz va tasdiqni qo'lda yozdiramiz.
-  if (nf > 0) {
-    const zeroing = notFound.value.filter(i => Number(i.countedQty) === 0).length
-    const ogoh =
-      `DIQQAT — SANOQ TUGALLANMAGAN!\n\n` +
-      `Skanerlangan: ${scanned} ta\n` +
-      `Skanerlanmagan: ${nf} ta\n\n` +
-      `Yakunlasangiz, skanerlanmagan ${zeroing} ta tovarning qoldig'i ` +
-      `0 GA TUSHADI va ombor ma'lumoti yo'qoladi.\n\n` +
-      `Agar sanoqni tugatmagan bo'lsangiz — BEKOR QILING.\n\n` +
-      `Davom etish uchun quyiga "TASDIQLAYMAN" deb yozing:`
-    const javob = prompt(ogoh)
-    if (javob === null) return
-    if (javob.trim().toUpperCase() !== 'TASDIQLAYMAN') {
-      showToast('Yakunlash bekor qilindi', 'err')
-      return
-    }
-  }
-
+  // Sanoq tugallanmagan bo'lsa, ogohlantirishni SERVER beradi (409) —
+  // quyidagi catch blokida ishlanadi. Tekshiruv serverda bo'lgani uchun
+  // u brauzerni chetlab o'tib ham bajarilmaydi.
   const msg =
     `Inventarizatsiya yakunlansinmi?\n\n` +
     `Topildi: ${found.value.length}\n` +
@@ -293,7 +303,32 @@ async function finishDoc() {
     beep('finish')
     showToast('Inventarizatsiya yakunlandi, qoldiqlar yangilandi', 'ok')
   } catch (e) {
-    showToast(e?.response?.data?.message || 'Yakunlashda xatolik', 'err')
+    // Server sanoq tugallanmaganini aniqlab, yakunlamay to'xtatdi (409).
+    // Bu oxirgi himoya — brauzerdagi ogohlantirish chetlab o'tilgan
+    // bo'lsa ham ombor tasodifan nolga tushmaydi.
+    const d = e?.response?.data
+    if (e?.response?.status === 409 && d?.code === 'SANOQ_TUGALLANMAGAN') {
+      const javob = prompt(
+        `TO'XTANG — SANOQ TUGALLANMAGAN!\n\n` +
+        `${d.nolga_tushadi} ta tovarning qoldig'i 0 GA TUSHADI.\n` +
+        `Skanerlangan: ${d.skanerlangan} ta.\n\n` +
+        `Bu omborni nolga tushirish demak. Sanoqni tugatmagan bo'lsangiz — BEKOR QILING.\n\n` +
+        `Baribir davom etish uchun "TASDIQLAYMAN" deb yozing:`
+      )
+      if (javob === null || javob.trim().toUpperCase() !== 'TASDIQLAYMAN') {
+        showToast('Yakunlash bekor qilindi — qoldiqlar saqlanib qoldi', 'ok')
+        return
+      }
+      try {
+        doc.value = await inventoriesApi.finish(doc.value.id, { force: true })
+        beep('finish')
+        showToast('Inventarizatsiya yakunlandi', 'ok')
+      } catch (e2) {
+        showToast(e2?.response?.data?.message || 'Yakunlashda xatolik', 'err')
+      }
+      return
+    }
+    showToast(d?.message || 'Yakunlashda xatolik', 'err')
   } finally {
     busy.value = false
   }
@@ -387,6 +422,12 @@ async function deleteDoc(id) {
             </p>
           </div>
         </div>
+        <!-- Ortiqcha satrlar noto'g'ri chiqqan bo'lsa qayta tekshirish -->
+        <button v-if="doc.status === 'draft' && extra.length > 0 && canEdit('products')"
+                class="inv__btn inv__btn--fix" :disabled="busy" @click="repairDoc"
+                title="Takroriy satrlarni birlashtiradi">
+          <AppIcon name="refresh-cw" :size="15" /> Qayta tekshirish
+        </button>
         <button v-if="doc.status === 'draft' && canEdit('products')"
                 class="inv__btn inv__btn--primary" :disabled="busy" @click="finishDoc">
           <AppIcon name="check-circle" :size="15" /> Tugatish
@@ -593,6 +634,11 @@ async function deleteDoc(id) {
   background: linear-gradient(135deg, #6366f1, #4f46e5);
   border-color: transparent; color: #fff;
   box-shadow: 0 2px 8px rgba(79,70,229,.28);
+}
+/* Qayta tekshirish — xavfsiz amal, xotirjam rang */
+.inv__btn--fix {
+  background: #0f766e; border-color: transparent; color: #fff;
+  box-shadow: 0 2px 8px rgba(15,118,110,.24);
 }
 /* Yakunlashni qaytarish — ogohlantiruvchi rang, tasodifan bosilmasin */
 .inv__btn--undo {

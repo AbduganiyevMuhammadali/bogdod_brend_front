@@ -75,13 +75,22 @@ export const inventoriesApi = {
     await http.delete(`/inventories/items/${itemId}`)
   },
 
-  async finish(id) {
-    const res = await http.post(`/inventories/${id}/finish`)
+  // Sanoq tugallanmagan bo'lsa server 409 qaytaradi va yakunlamaydi —
+  // faqat `force: true` bilan qayta yuborilganda bajaradi.
+  async finish(id, { force = false } = {}) {
+    const res = await http.post(`/inventories/${id}/finish`, { force })
     return toFrontend(res.data)
   },
 
   async cancel(id) {
     await http.post(`/inventories/${id}/cancel`)
+  },
+
+  // Noto'g'ri "ortiqcha" satrlarni qayta tekshiradi: bir tovarning
+  // takroriy satrlarini birlashtiradi va sanoq yo'qolmaydi
+  async repair(id) {
+    const res = await http.post(`/inventories/${id}/repair`)
+    return { ...res.data, doc: toFrontend(res.data.doc) }
   },
 
   // Yakunlashni qaytarish — noto'g'ri yakunlangan sanoqdan keyin
