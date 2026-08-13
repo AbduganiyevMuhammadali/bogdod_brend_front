@@ -500,6 +500,12 @@ async function deleteDoc(id) {
             <div class="scan__last-qty">
               <strong>{{ fmtQ(lastScan.item.countedQty) }}</strong> / {{ fmtQ(lastScan.item.expectedQty) }}
             </div>
+            <!-- Hisobda bir nechta dona bo'lsa, nechtasi qolganini aytamiz —
+                 sanoqchi "yana urish kerakmi?" deb o'ylab qolmasin -->
+            <div v-if="lastScan.item.expectedQty - lastScan.item.countedQty > 0"
+                 class="scan__last-left">
+              yana {{ fmtQ(lastScan.item.expectedQty - lastScan.item.countedQty) }} ta qoldi
+            </div>
           </div>
         </transition>
       </div>
@@ -774,6 +780,7 @@ async function deleteDoc(id) {
   font-variant-numeric: tabular-nums;
 }
 .scan__last-qty strong { font-size: 15px; color: #0f172a; }
+.scan__last-left { margin-top: 2px; font-size: 11px; font-weight: 600; color: #b45309; }
 
 /* Yangi skan natijasi yumshoq paydo bo'ladi */
 .pop-enter-active { transition: all .22s cubic-bezier(.34,1.56,.64,1); }
