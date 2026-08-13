@@ -61,6 +61,8 @@ export const inventoriesApi = {
     const res = await http.post(`/inventories/${id}/scan`, { barcode, qty })
     return {
       holat:    res.data.holat,
+      // Bir shtrix-kod bir necha tovarga berilgan bo'lsa — ro'yxati
+      chalkash: res.data.chalkash || null,
       takroriy: res.data.takroriy,
       item:     itemToFrontend(res.data.item),
     }

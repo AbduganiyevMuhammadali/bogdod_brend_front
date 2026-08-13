@@ -123,7 +123,19 @@ async function onScan() {
     else if (res.holat === 'notanish') beep('unknown')
     else                               beep('found')
 
-    lastScan.value = { holat: res.holat, item: res.item, at: Date.now() }
+    lastScan.value = { holat: res.holat, item: res.item, at: Date.now(), chalkash: res.chalkash }
+
+    // Bir shtrix-kod bir necha tovarga berilgan bo'lsa — sanoq to'g'ri
+    // chiqmaydi: urishlar doim bittasiga tushadi, qolganlari "topilmadi"
+    // bo'lib qoladi. Sababi ko'rinib tursin.
+    if (res.chalkash?.length > 1) {
+      showToast(
+        `Diqqat: bu shtrix-kod ${res.chalkash.length} ta tovarga berilgan ` +
+        `(${res.chalkash.map(p => p.name).slice(0, 2).join(', ')}…). ` +
+        `Yorliqlarni tekshiring.`,
+        'err'
+      )
+    }
 
     // Hujjatdagi satrni yangilaymiz (qayta yuklamasdan — tez bo'lishi kerak)
     const idx = doc.value.items.findIndex(i => i.id === res.item.id)
