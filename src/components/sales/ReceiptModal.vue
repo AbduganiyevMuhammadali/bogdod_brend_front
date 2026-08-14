@@ -210,12 +210,10 @@ function printReceipt() {
   box-shadow: 0 4px 16px rgba(99,102,241,0.3);
 }
 .btn-new:hover { opacity: 0.9; }
-</style>
 
-<!-- Chop etish uslublari — `scoped` EMAS.
-     window.print() butun sahifani bosadi, shuning uchun qoidalar
-     global bo'lishi kerak. -->
-<style>
+/* Chop etish uslublari — ataylab `scoped` EMAS.
+   window.print() butun sahifani bosadi, shuning uchun qoidalar
+   global bo'lishi kerak. */
 @media print {
   /* Faqat chek chiqsin.
      `display: none` bilan ota-elementlarni yashirib bo'lmaydi — chek
