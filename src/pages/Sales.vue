@@ -241,6 +241,8 @@ function setPrice(item, v) {
 const totalSum   = computed(() => cart.value.reduce((s,i) => s+(Number(i.totalSum)||0), 0))
 const payableSum = computed(() => Math.max(0, totalSum.value - (Number(discount.value)||0)))
 const debtSum    = computed(() => paymentType.value === 'Qarz' ? payableSum.value : 0)
+// Qarz qaytarish muddati — to'lov oynasidan keladi (SalePayModal)
+const dueDate    = ref(null)
 const itemsCount = computed(() => cart.value.reduce((s,i) => s+i.qty, 0))
 
 // Rounding discount chips: how much to cut so payable becomes a clean number
@@ -288,6 +290,9 @@ async function completeSale() {
       payment_type:  paymentType.value,
       price_type:    priceType.value,
       discount:      discount.value,
+      // Qarz qaytarish muddati — to'lov oynasida tanlanadi.
+      // Faqat qarzli sotuvda ma'noga ega (backend ham shuni tekshiradi).
+      due_date:      debtSum.value > 0 ? (dueDate.value || null) : null,
       exchange_rate: exchangeRate.value,
       items: soldItems.map(i=>({
         product_id:i.productId, barcode:i.barcode, product_name:i.productName,
@@ -1646,6 +1651,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
     @complete="completeSale"
     @update:discount="discount=$event"
     @update:payment-type="paymentType=$event"
+    @update:due-date="dueDate=$event"
     @drop-client="dropClient"
   />
 

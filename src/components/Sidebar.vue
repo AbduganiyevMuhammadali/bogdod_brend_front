@@ -70,6 +70,7 @@ const navGroups = [
       { key: 'tezkor',     label: 'Tezkor kiritish', icon: 'zap',      color: '#38bdf8', bg: 'rgba(56,189,248,0.14)', module: 'products' },
       { key: 'inventarizatsiya', label: 'Inventarizatsiya', icon: 'list', color: '#a78bfa', bg: 'rgba(167,139,250,0.14)', module: 'products' },
       { key: 'partners',   label: 'Mijozlar',      icon: 'users',      color: '#38bdf8', bg: 'rgba(56,189,248,0.14)'  },
+      { key: 'debtors',    label: 'Qarzdorlar',    icon: 'clock',      color: '#f87171', bg: 'rgba(248,113,113,0.14)', module: 'partners' },
       { key: 'suppliers',  label: 'Yetkazuvchilar', icon: 'truck',      color: '#fb923c', bg: 'rgba(251,146,60,0.14)'  },
     ],
   },

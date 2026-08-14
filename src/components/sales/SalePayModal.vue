@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import QRCode from 'qrcode'
 import AppIcon from '@/components/AppIcon.vue'
 import { loadStoreSettings } from '@/composables/useStoreSettings.js'
@@ -48,7 +48,47 @@ function toUSD(v) {
   return (Number(v) / props.exchangeRate).toFixed(2)
 }
 
-const emit = defineEmits(['close', 'complete', 'update:discount', 'update:paymentType', 'drop-client'])
+const emit = defineEmits(['close', 'complete', 'update:discount', 'update:paymentType', 'drop-client', 'update:dueDate'])
+
+// ── Qarz muddati ────────────────────────────────────────────────────
+// Har sotuvga alohida sana. Bo'sh qoldirilsa — muddatsiz qarz.
+function bugunKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+function kunQosh(n) {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+
+const DUE_QUICK = [
+  { nom: 'Bugun',   kun: 0  },
+  { nom: 'Ertaga',  kun: 1  },
+  { nom: '3 kun',   kun: 3  },
+  { nom: '1 hafta', kun: 7  },
+  { nom: '2 hafta', kun: 14 },
+  { nom: '1 oy',    kun: 30 },
+]
+
+// Standart: bir hafta. Kassir odatda shu muddatni beradi, kerak bo'lsa
+// bir bosishda o'zgartiradi.
+const dueDate = ref(kunQosh(7))
+
+// Tanlangan sana ota-komponentga uzatiladi (u sotuvga qo'shadi)
+watch(dueDate, v => emit('update:dueDate', v || null), { immediate: true })
+
+const dueLabel = computed(() => {
+  if (!dueDate.value) return ''
+  const kun = Math.round((new Date(dueDate.value) - new Date(bugunKey())) / 86400000)
+  const sana = new Date(dueDate.value).toLocaleDateString('uz-UZ', {
+    day: 'numeric', month: 'long', weekday: 'short',
+  })
+  if (kun === 0) return `${sana} — bugun`
+  if (kun === 1) return `${sana} — ertaga`
+  if (kun < 0)   return `${sana} — o'tgan sana!`
+  return `${sana} — ${kun} kundan keyin`
+})
 
 const PAY_ICONS = { 'Naqd': 'dollar-sign', 'Karta': 'credit-card', "O'tkazma": 'send', 'Qarz': 'clock' }
 const CARD_COLORS = [
@@ -298,6 +338,22 @@ function printReceipt() {
             Qarzga: <strong>{{ fmt(debtSum) }} so'm</strong> · {{ selectedClient?.name }}
           </div>
 
+          <!-- Qarzni qaytarish muddati. Har sotuvga alohida belgilanadi,
+               shuning uchun mijozda bir necha qarz bo'lsa ham chalkashmaydi. -->
+          <div v-if="debtSum > 0" class="pm-due">
+            <div class="pm-due__lbl">
+              <AppIcon name="calendar" :size="12"/> Qarz qaytarish sanasi
+            </div>
+            <div class="pm-due__quick">
+              <button v-for="q in DUE_QUICK" :key="q.kun"
+                      class="pm-due__q" :class="{ on: dueDate === kunQosh(q.kun) }"
+                      @click="dueDate = kunQosh(q.kun)">{{ q.nom }}</button>
+            </div>
+            <input v-model="dueDate" type="date" class="pm-due__inp" :min="bugunKey()" />
+            <div v-if="dueDate" class="pm-due__info">{{ dueLabel }}</div>
+            <div v-else class="pm-due__warn">Sana belgilanmasa, muddatsiz qarz bo'ladi</div>
+          </div>
+
           <div v-if="saveErr" class="pm-err-box">{{ saveErr }}</div>
 
           <button class="pm-pay-btn" :disabled="saving" @click="emit('complete')">
@@ -486,6 +542,18 @@ function printReceipt() {
 .pm-cli-x:hover{color:#fca5a5}
 
 .pm-debt-warn{display:flex;align-items:center;gap:6px;padding:8px 10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;font-size:11.5px;color:#fca5a5;margin-top:8px;flex-shrink:0}
+
+/* Qarz qaytarish sanasi */
+.pm-due{margin-top:10px;padding:10px 11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:9px;flex-shrink:0}
+.pm-due__lbl{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:8px}
+.pm-due__quick{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.pm-due__q{padding:5px 10px;font-size:11.5px;font-weight:600;color:rgba(255,255,255,.75);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:7px;cursor:pointer;font-family:inherit;transition:all .15s}
+.pm-due__q:hover{background:rgba(255,255,255,.13)}
+.pm-due__q.on{background:#6366f1;border-color:#818cf8;color:#fff}
+.pm-due__inp{width:100%;padding:8px 10px;font-size:13px;font-weight:600;color:#fff;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:7px;outline:none;font-family:inherit;color-scheme:dark}
+.pm-due__inp:focus{border-color:#818cf8}
+.pm-due__info{margin-top:6px;font-size:11.5px;font-weight:600;color:#a5b4fc}
+.pm-due__warn{margin-top:6px;font-size:11px;color:rgba(255,255,255,.45)}
 
 .pm-err-box{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);border-radius:8px;padding:8px 12px;font-size:12px;color:#fca5a5;text-align:center;margin-top:8px;flex-shrink:0}
 

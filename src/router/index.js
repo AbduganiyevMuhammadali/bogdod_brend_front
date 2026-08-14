@@ -15,6 +15,7 @@ const routes = [
   { path: '/partiya',    component: () => import('@/pages/Partiyalar.vue'),    meta: { title: 'nav.partiya',   module: 'partiya' } },
   { path: '/partners',   component: () => import('@/pages/Kontragentlar.vue'), meta: { title: 'nav.customers', module: 'partners' } },
   { path: '/suppliers',  component: () => import('@/pages/Yetkazuvchilar.vue'), meta: { title: 'Yetkazuvchilar', module: 'suppliers' } },
+  { path: '/debtors',    component: () => import('@/pages/Qarzdorlar.vue'),    meta: { title: 'Qarzdorlar',     module: 'partners' } },
   { path: '/payments',   component: () => import('@/pages/Tolonlar.vue'),      meta: { title: 'Kassa',          module: 'payments' } },
   { path: '/returns',    component: () => import('@/pages/Qaytarishlar.vue'),  meta: { title: 'Qaytarishlar',   module: 'returns' } },
   { path: '/users',      component: () => import('@/pages/Users.vue'),         meta: { title: 'nav.users',      module: 'users' } },
