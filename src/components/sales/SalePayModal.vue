@@ -1,9 +1,30 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import QRCode from 'qrcode'
 import AppIcon from '@/components/AppIcon.vue'
 import { loadStoreSettings } from '@/composables/useStoreSettings.js'
 
 const store = loadStoreSettings()
+
+// Chek pastidagi QR — skanerlaganda do'kon sahifasi ochiladi.
+// Rasm data:URI sifatida yasaladi, shuning uchun chop etishda ham,
+// internetsiz ham ishlaydi (tashqi so'rov ketmaydi).
+const SHOP_URL = 'https://www.instagram.com/bogdod_brand?igsh=MWNkbGZnOGQ1ejVkZQ=='
+const qrDataUrl = ref('')
+
+onMounted(async () => {
+  try {
+    qrDataUrl.value = await QRCode.toDataURL(SHOP_URL, {
+      // Katta yasaymiz: termal printer past aniqlikda bosadi, kichik
+      // rasm "yopishib" o'qilmay qoladi.
+      width: 512,
+      margin: 2,
+      // 'H' — 30% xato tuzatish: bosma sifati past bo'lsa ham skaner o'qiydi
+      errorCorrectionLevel: 'H',
+      color: { dark: '#000000', light: '#FFFFFF' },
+    })
+  } catch { /* QR yasalmasa chek baribir chop etilaveradi */ }
+})
 
 const props = defineProps({
   cart:           { type: Array,  default: () => [] },
@@ -75,13 +96,97 @@ function printReceipt() {
     .rp-footer{text-align:center;padding:6px 0 4px;border-top:1px dashed #d1d5db}
     .rp-footer__line{font-size:12px;font-weight:700;letter-spacing:1px}
     .rp-footer__sub{font-size:10px;color:#9ca3af;margin-top:2px}
-    @media print{body{background:white;padding:0}}
+    .rp-qr{text-align:center;padding:10px 0 4px;border-top:1px dashed #d1d5db;margin-top:6px}
+    .rp-qr__img{width:110px;height:110px;display:block;margin:0 auto 4px}
+    .rp-qr__cap{font-size:11px;font-weight:700}
+    .rp-qr__sub{font-size:10.5px;color:#6b7280}
+
+    /* ── TERMAL PRINTER UCHUN ────────────────────────────────────────
+       Ekrandagi kulrang ranglar (#6b7280, #9ca3af, #d1d5db) termal
+       printerda och kul nuqtalar bo'lib chiqadi va o'qib bo'lmaydi.
+       Chop etishda hamma matn TO'Q QORA va qalinroq bo'lishi kerak. */
+    @media print{
+      body{background:white;padding:0;display:block}
+      .receipt-paper{width:auto;max-width:none}
+
+      /* Hamma matn qora, brauzer ranglarni "tejamasin".
+         !important shart: yuqorida .rp-meta-row uchun kulrang rang
+         berilgan va u aniqroq selektor bo'lgani uchun ustunlik qilardi —
+         natijada sana, chek raqami, kassir, chegirma xira chiqardi. */
+      *,*::before,*::after{
+        color:#000 !important;
+        opacity:1 !important;
+        -webkit-print-color-adjust:exact !important;
+        print-color-adjust:exact !important;
+      }
+
+      /* Ingichka shrift termal bosmada yo'qoladi — qalinlashtiramiz */
+      .rp-body{padding:4px 6px}
+      .rp-store{font-size:20px;font-weight:900}
+      .rp-store-sub{font-size:12px;font-weight:700}
+      .rp-meta-row{font-size:11.5px;font-weight:700}
+      .rp-row{font-size:12.5px;font-weight:700}
+      .rp-val,.rp-bold{font-weight:900}
+      .rp-items-hdr{font-size:11px;font-weight:900;border-bottom:1px solid #000}
+      .rp-item__name{font-size:13px;font-weight:900}
+      .rp-item__line{font-size:12px;font-weight:700}
+      .rp-item__sum{font-weight:900}
+      .rp-total-row{font-size:16px;font-weight:900;border-top:2px solid #000;border-bottom:2px solid #000}
+      .rp-pay-badge{font-weight:900}
+      .rp-footer__line{font-size:12.5px;font-weight:900}
+      .rp-footer__sub{font-size:11px;font-weight:700}
+      .rp-qr__cap{font-size:12px;font-weight:900}
+      .rp-qr__sub{font-size:11px;font-weight:700}
+
+      /* Ajratgichlar aniq ko'rinsin */
+      .rp-dashes{border-top:1px dashed #000}
+      .rp-footer,.rp-qr{border-top:1px dashed #000}
+
+      /* Qog'oz teshiklari bezagi — bosmada kerak emas */
+      .rp-perf--top,.rp-perf--bot{display:none}
+
+      /* QR aniq skanerlanishi uchun yetarli katta.
+         image-rendering:pixelated — brauzer QR kvadratchalarini
+         silliqlamasin, aks holda chetlari xiralashib skaner o'qimaydi. */
+      .rp-qr{padding:8px 0 6px}
+      .rp-qr__img{
+        width:36mm;height:36mm;
+        image-rendering:pixelated;
+        image-rendering:-moz-crisp-edges;
+        image-rendering:crisp-edges;
+      }
+
+      /* Soxta shtrix-kod bezagi bosmada dog' bo'ladi */
+      .rp-bc-bar{background:#000 !important;opacity:1 !important}
+      .rp-bc-num{font-size:10px;font-weight:700}
+
+      .rp-item,.rp-row,.rp-qr{page-break-inside:avoid}
+      @page{margin:0}
+    }
   </style></head><body>`)
   win.document.write(el.outerHTML)
   win.document.write('</body></html>')
   win.document.close()
   win.focus()
-  setTimeout(() => { win.print(); win.close() }, 400)
+  // Chop etishdan OLDIN rasmlar (QR) to'liq yuklanishini kutamiz.
+  // Ilgari bu yerda oddiy 400ms kutish bor edi va QR ulgurmasdan
+  // bosilib ketardi — chekda QR umuman chiqmasdi.
+  const bosib = () => {
+    try { win.focus(); win.print(); } finally { win.close(); }
+  };
+
+  const rasmlar = Array.from(win.document.images || []);
+  const kutish = rasmlar.map(img => (
+    img.complete
+      ? Promise.resolve()
+      : new Promise(res => { img.onload = img.onerror = res; })
+  ));
+
+  // Rasm yuklanmay qolsa ham chek chiqaversin — 3 soniyadan keyin bosamiz
+  Promise.race([
+    Promise.all(kutish),
+    new Promise(res => setTimeout(res, 3000)),
+  ]).then(() => setTimeout(bosib, 150));
 }
 </script>
 
@@ -281,6 +386,13 @@ function printReceipt() {
                 <div class="rp-footer">
                   <div class="rp-footer__line">{{ store.footer }}</div>
                 </div>
+
+                <!-- Do'kon sahifasiga QR — mijoz skanerlab kirsin -->
+                <div v-if="qrDataUrl" class="rp-qr">
+                  <img :src="qrDataUrl" alt="" class="rp-qr__img" />
+                  <div class="rp-qr__cap">Bizni kuzatib boring</div>
+                  <div class="rp-qr__sub">@bogdod_brand</div>
+                </div>
               </div>
               <div class="rp-perf rp-perf--bot"></div>
             </div>
@@ -409,4 +521,10 @@ function printReceipt() {
 .rp-footer{text-align:center;padding:6px 0 4px;border-top:1px dashed #d1d5db}
 .rp-footer__line{font-size:11.5px;font-weight:700;letter-spacing:1px}
 .rp-footer__sub{font-size:10px;color:#9ca3af;margin-top:2px}
+
+/* Do'kon sahifasiga QR (ekrandagi ko'rinish) */
+.rp-qr{text-align:center;padding:10px 0 4px;border-top:1px dashed #d1d5db;margin-top:6px}
+.rp-qr__img{width:96px;height:96px;display:block;margin:0 auto 4px}
+.rp-qr__cap{font-size:11px;font-weight:700;color:#111827}
+.rp-qr__sub{font-size:10.5px;color:#6b7280}
 </style>
