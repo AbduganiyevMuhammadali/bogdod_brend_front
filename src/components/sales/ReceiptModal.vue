@@ -211,3 +211,79 @@ function printReceipt() {
 }
 .btn-new:hover { opacity: 0.9; }
 </style>
+
+<!-- Chop etish uslublari — `scoped` EMAS.
+     window.print() butun sahifani bosadi, shuning uchun qoidalar
+     global bo'lishi kerak. -->
+<style>
+@media print {
+  /* Faqat chek chiqsin.
+     `display: none` bilan ota-elementlarni yashirib bo'lmaydi — chek
+     ular ichida. Shuning uchun `visibility` ishlatamiz: hammasi
+     ko'rinmas bo'ladi, chek va uning ichidagilar qayta ko'rinadi. */
+  body * { visibility: hidden !important; }
+
+  #printable-receipt,
+  #printable-receipt * { visibility: visible !important; }
+
+  #printable-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 4mm !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  /* Tugmalar va modal bezaklari umuman chiqmasin */
+  .modal__footer, .btn-print, .btn-new { display: none !important; }
+
+  /* ── ASOSIY: termal printer uchun hamma narsa TO'Q QORA ──────────
+     Ekrandagi kulrang ranglar (var(--color-text-3) va h.k.) termal
+     printerda och nuqtalar bo'lib chiqadi va o'qib bo'lmaydi.
+     Chop etishda hammasini qora va qalinroq qilamiz. */
+  #printable-receipt,
+  #printable-receipt * {
+    color: #000 !important;
+    background: transparent !important;
+    opacity: 1 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    /* Brauzer ranglarni "tejab" och chiqarmasin */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Termal printerda ingichka shrift yo'qoladi — hammasi qalin */
+  #printable-receipt * { font-weight: 700 !important; }
+
+  /* O'lchamlar: 58mm/80mm chek qog'ozida o'qilarli bo'lsin */
+  #printable-receipt { font-size: 13px !important; line-height: 1.45 !important; }
+  .rcpt__brand      { font-size: 19px !important; font-weight: 900 !important; }
+  .rcpt__sub        { font-size: 12px !important; }
+  .rcpt__meta       { font-size: 12px !important; }
+  .rcpt__item-name  { font-size: 14px !important; font-weight: 900 !important; }
+  .rcpt__item-qty   { font-size: 12.5px !important; }
+  .rcpt__item-total { font-size: 14px !important; font-weight: 900 !important; }
+  .rcpt__trow       { font-size: 13px !important; }
+  .rcpt__trow--total{ font-size: 17px !important; font-weight: 900 !important; }
+  .rcpt__thanks     { font-size: 13px !important; }
+
+  /* Ajratgich chiziqlar aniq ko'rinsin */
+  .rcpt__sep {
+    border-top: 1px solid #000 !important;
+    margin: 6px 0 !important;
+  }
+  .rcpt__sep--dashed { border-top-style: dashed !important; }
+
+  /* Logotip termal printerda dog' bo'lib chiqadi — olib tashlaymiz */
+  #printable-receipt img { display: none !important; }
+
+  /* Chek bo'linib ketmasin */
+  .rcpt__item, .rcpt__trow { page-break-inside: avoid !important; }
+
+  @page { margin: 0; size: auto; }
+}
+</style>
