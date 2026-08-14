@@ -7,7 +7,7 @@ export function loadStoreSettings() {
   let s = {}
   try { s = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch { /* ignore */ }
   return {
-    name:    s.storeName?.trim()    || 'Sellz',
+    name:    s.storeName?.trim()    || "BAG'DOD BRAND",
     address: s.storeAddress?.trim() || '',
     phone:   s.storePhone?.trim()   || '',
     header:  s.receiptHeader?.trim() || '',

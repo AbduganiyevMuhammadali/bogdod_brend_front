@@ -75,31 +75,31 @@ function printReceipt() {
     .rp-perf--top{height:14px;background:repeating-radial-gradient(circle at 7px 7px,#e5e7eb 6px,white 6px) -7px 0/14px 14px}
     .rp-perf--bot{height:14px;background:repeating-radial-gradient(circle at 7px 0,#e5e7eb 6px,white 6px) -7px 0/14px 14px}
     .rp-body{padding:14px 16px}
-    .rp-store{text-align:center;font-size:18px;font-weight:900;letter-spacing:3px;margin-bottom:3px}
-    .rp-store-sub{text-align:center;font-size:10.5px;color:#6b7280;margin-bottom:4px}
-    .rp-meta-row{display:flex;justify-content:space-between;font-size:10.5px;color:#9ca3af;margin-bottom:2px}
+    .rp-store{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;margin-bottom:4px;text-transform:uppercase;line-height:1.2}
+    .rp-store-sub{text-align:center;font-size:14px;font-weight:800;color:#111827;margin-bottom:4px}
+    .rp-meta-row{display:flex;justify-content:space-between;font-size:14px;font-weight:800;color:#111827;margin-bottom:3px}
     .rp-dashes{border-top:1px dashed #d1d5db;margin:8px 0}
-    .rp-row{display:flex;justify-content:space-between;font-size:11.5px;margin:3px 0}
-    .rp-val{font-weight:600}.rp-bold{font-weight:800}
-    .rp-items-hdr{display:flex;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #f3f4f6}
-    .rp-item{margin-bottom:7px}
-    .rp-item__name{font-size:12px;font-weight:700;color:#111827;margin-bottom:1px}
-    .rp-item__line{display:flex;justify-content:space-between;font-size:11px}
-    .rp-item__qty{color:#6b7280}.rp-item__sum{font-weight:700}
+    .rp-row{display:flex;justify-content:space-between;font-size:15px;font-weight:800;margin:5px 0}
+    .rp-val{font-weight:900}.rp-bold{font-weight:900}
+    .rp-items-hdr{display:flex;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#111827;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid #111827}
+    .rp-item{margin-bottom:10px}
+    .rp-item__name{font-size:16px;font-weight:900;color:#111827;margin-bottom:3px;line-height:1.3}
+    .rp-item__line{display:flex;justify-content:space-between;font-size:15px;font-weight:900}
+    .rp-item__qty{color:#111827;font-weight:900}.rp-item__sum{font-weight:900}
     .rp-row--disc{color:#ef4444}.rp-row--debt{color:#ef4444;font-weight:700}
-    .rp-total-row{display:flex;justify-content:space-between;font-weight:900;font-size:15px;padding:8px 0;margin:4px 0;border-top:2px solid #111827;border-bottom:2px solid #111827}
-    .rp-pay-badge{font-weight:800;font-size:12px}
+    .rp-total-row{display:flex;justify-content:space-between;font-weight:900;font-size:20px;padding:10px 0;margin:8px 0;border-top:3px solid #111827;border-bottom:3px solid #111827}
+    .rp-pay-badge{font-weight:900;font-size:15px}
     .rp-barcode{text-align:center;padding:10px 0 6px}
     .rp-bc-bars{display:flex;justify-content:center;align-items:flex-end;gap:1px;margin-bottom:5px}
     .rp-bc-bar{background:#111827;display:inline-block}
-    .rp-bc-num{font-size:9px;letter-spacing:3px;color:#9ca3af}
+    .rp-bc-num{font-size:11px;font-weight:900;letter-spacing:2px;color:#111827}
     .rp-footer{text-align:center;padding:6px 0 4px;border-top:1px dashed #d1d5db}
-    .rp-footer__line{font-size:12px;font-weight:700;letter-spacing:1px}
-    .rp-footer__sub{font-size:10px;color:#9ca3af;margin-top:2px}
+    .rp-footer__line{font-size:15px;font-weight:900;letter-spacing:.5px;line-height:1.35}
+    .rp-footer__sub{font-size:13px;font-weight:800;color:#111827;margin-top:2px}
     .rp-qr{text-align:center;padding:10px 0 4px;border-top:1px dashed #d1d5db;margin-top:6px}
     .rp-qr__img{width:110px;height:110px;display:block;margin:0 auto 4px}
-    .rp-qr__cap{font-size:11px;font-weight:700}
-    .rp-qr__sub{font-size:10.5px;color:#6b7280}
+    .rp-qr__cap{font-size:14px;font-weight:900}
+    .rp-qr__sub{font-size:13px;font-weight:800;color:#111827}
 
     /* ── TERMAL PRINTER UCHUN ────────────────────────────────────────
        Ekrandagi kulrang ranglar (#6b7280, #9ca3af, #d1d5db) termal
@@ -122,21 +122,36 @@ function printReceipt() {
 
       /* Ingichka shrift termal bosmada yo'qoladi — qalinlashtiramiz */
       .rp-body{padding:4px 6px}
-      .rp-store{font-size:20px;font-weight:900}
-      .rp-store-sub{font-size:12px;font-weight:700}
-      .rp-meta-row{font-size:11.5px;font-weight:700}
-      .rp-row{font-size:12.5px;font-weight:700}
+      /* Do'kon nomi — chekning eng ko'zga tashlanadigan qismi.
+         Katta, qalin va bo'sh joy bilan ajratilgan. */
+      .rp-store{
+        font-size:26px;
+        font-weight:900;
+        letter-spacing:2px;
+        text-transform:uppercase;
+        line-height:1.15;
+        margin:2px 0 6px;
+      }
+      /* Barcha matn yirik va qalin — uzoqdan ham o'qilsin.
+         Termal bosmada ingichka shrift yo'qoladi, shuning uchun
+         hamma joyda 900 (eng qalin) ishlatiladi. */
+      .rp-store-sub{font-size:15px;font-weight:900;line-height:1.35}
+      .rp-meta-row{font-size:15px;font-weight:900;margin-bottom:3px}
+      .rp-row{font-size:16px;font-weight:900;margin:5px 0}
       .rp-val,.rp-bold{font-weight:900}
-      .rp-items-hdr{font-size:11px;font-weight:900;border-bottom:1px solid #000}
-      .rp-item__name{font-size:13px;font-weight:900}
-      .rp-item__line{font-size:12px;font-weight:700}
+      .rp-items-hdr{font-size:13px;font-weight:900;border-bottom:2px solid #000;padding-bottom:5px;margin-bottom:8px}
+      .rp-item{margin-bottom:10px}
+      .rp-item__name{font-size:17px;font-weight:900;line-height:1.3;margin-bottom:3px}
+      .rp-item__line{font-size:16px;font-weight:900}
+      .rp-item__qty{font-weight:900}
       .rp-item__sum{font-weight:900}
-      .rp-total-row{font-size:16px;font-weight:900;border-top:2px solid #000;border-bottom:2px solid #000}
-      .rp-pay-badge{font-weight:900}
-      .rp-footer__line{font-size:12.5px;font-weight:900}
-      .rp-footer__sub{font-size:11px;font-weight:700}
-      .rp-qr__cap{font-size:12px;font-weight:900}
-      .rp-qr__sub{font-size:11px;font-weight:700}
+      .rp-total-row{font-size:21px;font-weight:900;border-top:3px solid #000;border-bottom:3px solid #000;padding:10px 0;margin:8px 0}
+      .rp-pay-badge{font-size:16px;font-weight:900}
+      .rp-footer__line{font-size:16px;font-weight:900;line-height:1.35}
+      .rp-footer__sub{font-size:14px;font-weight:900}
+      .rp-qr__cap{font-size:15px;font-weight:900}
+      .rp-qr__sub{font-size:14px;font-weight:900}
+      .rp-bc-num{font-size:12px;font-weight:900;letter-spacing:2px}
 
       /* Ajratgichlar aniq ko'rinsin */
       .rp-dashes{border-top:1px dashed #000}
@@ -156,9 +171,8 @@ function printReceipt() {
         image-rendering:crisp-edges;
       }
 
-      /* Soxta shtrix-kod bezagi bosmada dog' bo'ladi */
+      /* Shtrix-kod chiziqlari to'q qora bo'lsin (o'lchami yuqorida) */
       .rp-bc-bar{background:#000 !important;opacity:1 !important}
-      .rp-bc-num{font-size:10px;font-weight:700}
 
       .rp-item,.rp-row,.rp-qr{page-break-inside:avoid}
       @page{margin:0}
@@ -321,10 +335,10 @@ function printReceipt() {
                 </div>
                 <div class="rp-dashes"></div>
 
+                <!-- Ombor va narx turi chekda ko'rsatilmaydi: mijozga
+                     kerak emas, faqat joy egallaydi va chekni uzaytiradi -->
                 <div class="rp-row"><span>Hujjat №</span><span class="rp-val">#{{ docNumber }}</span></div>
-                <div class="rp-row"><span>Ombor</span><span class="rp-val">{{ warehouse }}</span></div>
                 <div v-if="selectedClient" class="rp-row"><span>Mijoz</span><span class="rp-val rp-bold">{{ selectedClient.name }}</span></div>
-                <div class="rp-row"><span>Narx turi</span><span class="rp-val">{{ priceType }}</span></div>
                 <div class="rp-dashes"></div>
 
                 <div class="rp-items-hdr">
@@ -497,34 +511,34 @@ function printReceipt() {
 .rp-perf--top{background:repeating-radial-gradient(circle at 7px 7px,#f0f0f0 6px,white 6px) -7px 0/14px 14px}
 .rp-perf--bot{background:repeating-radial-gradient(circle at 7px 0,#f0f0f0 6px,white 6px) -7px 0/14px 14px}
 .rp-body{padding:14px 16px;font-family:"Courier New",monospace}
-.rp-store{text-align:center;font-size:16px;font-weight:900;letter-spacing:3px;margin-bottom:3px}
-.rp-store-sub{text-align:center;font-size:10px;color:#6b7280;margin-bottom:4px}
-.rp-meta-row{display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;margin-bottom:2px}
+.rp-store{text-align:center;font-size:20px;font-weight:900;letter-spacing:2px;margin-bottom:4px;text-transform:uppercase;line-height:1.2}
+.rp-store-sub{text-align:center;font-size:12px;font-weight:700;color:#374151;margin-bottom:4px}
+.rp-meta-row{display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#374151;margin-bottom:3px}
 .rp-dashes{border-top:1px dashed #d1d5db;margin:8px 0}
-.rp-row{display:flex;justify-content:space-between;font-size:11px;margin:3px 0;color:#374151}
+.rp-row{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin:4px 0;color:#111827}
 .rp-val{font-weight:600}
 .rp-bold{font-weight:800}
 .rp-items-hdr{display:flex;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid #f3f4f6}
 .rp-item{margin-bottom:6px}
-.rp-item__name{font-size:11.5px;font-weight:700;color:#111827;margin-bottom:1px}
+.rp-item__name{font-size:14px;font-weight:800;color:#111827;margin-bottom:2px;line-height:1.3}
 .rp-item__line{display:flex;justify-content:space-between;font-size:10.5px}
 .rp-item__qty{color:#6b7280}
 .rp-item__sum{font-weight:700}
 .rp-row--disc{color:#ef4444}
 .rp-row--debt{color:#ef4444;font-weight:700}
-.rp-total-row{display:flex;justify-content:space-between;font-weight:900;font-size:14px;padding:7px 0;margin:4px 0;border-top:2px solid #111827;border-bottom:2px solid #111827}
+.rp-total-row{display:flex;justify-content:space-between;font-weight:900;font-size:18px;padding:9px 0;margin:6px 0;border-top:2.5px solid #111827;border-bottom:2.5px solid #111827}
 .rp-pay-badge{font-weight:800;font-size:11.5px}
 .rp-barcode{text-align:center;padding:10px 0 6px}
 .rp-bc-bars{display:flex;justify-content:center;align-items:flex-end;gap:1px;margin-bottom:5px}
 .rp-bc-bar{background:#111827;display:inline-block}
 .rp-bc-num{font-size:9px;letter-spacing:3px;color:#9ca3af}
 .rp-footer{text-align:center;padding:6px 0 4px;border-top:1px dashed #d1d5db}
-.rp-footer__line{font-size:11.5px;font-weight:700;letter-spacing:1px}
+.rp-footer__line{font-size:14px;font-weight:800;letter-spacing:.5px;line-height:1.35}
 .rp-footer__sub{font-size:10px;color:#9ca3af;margin-top:2px}
 
 /* Do'kon sahifasiga QR (ekrandagi ko'rinish) */
 .rp-qr{text-align:center;padding:10px 0 4px;border-top:1px dashed #d1d5db;margin-top:6px}
 .rp-qr__img{width:96px;height:96px;display:block;margin:0 auto 4px}
-.rp-qr__cap{font-size:11px;font-weight:700;color:#111827}
-.rp-qr__sub{font-size:10.5px;color:#6b7280}
+.rp-qr__cap{font-size:13px;font-weight:800;color:#111827}
+.rp-qr__sub{font-size:12px;font-weight:700;color:#374151}
 </style>
