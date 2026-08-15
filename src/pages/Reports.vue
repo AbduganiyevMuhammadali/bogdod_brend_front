@@ -346,20 +346,44 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
     <!-- Today mini summary -->
     <div v-if="todaySales.length" class="today-summary">
       <div class="ts-item ts-item--green">
-        <span>Jami sotuv:</span>
-        <span>{{ fmt(todaySales.reduce((s,x)=>s+Number(x.net_sum ?? x.total_sum ?? 0),0)) }} so'm</span>
+        <div class="ts-item__ico"><AppIcon name="trending-up" :size="17" :stroke-width="2.2"/></div>
+        <div class="ts-item__body">
+          <div class="ts-item__lbl">Jami sotuv</div>
+          <div class="ts-item__val">
+            {{ fmt(todaySales.reduce((s,x)=>s+Number(x.net_sum ?? x.total_sum ?? 0),0)) }}
+            <span class="ts-item__cur">so'm</span>
+          </div>
+        </div>
       </div>
       <div class="ts-item ts-item--indigo">
-        <span>To'langan:</span>
-        <span>{{ fmt(todaySales.reduce((s,x)=>s+Number(x.paid_sum||0),0)) }} so'm</span>
+        <div class="ts-item__ico"><AppIcon name="check-circle" :size="17" :stroke-width="2.2"/></div>
+        <div class="ts-item__body">
+          <div class="ts-item__lbl">To'langan</div>
+          <div class="ts-item__val">
+            {{ fmt(todaySales.reduce((s,x)=>s+Number(x.paid_sum||0),0)) }}
+            <span class="ts-item__cur">so'm</span>
+          </div>
+        </div>
       </div>
       <div class="ts-item ts-item--rose">
-        <span>Qarz:</span>
-        <span>{{ fmt(todaySales.reduce((s,x)=>s+Number(x.debt_sum||0),0)) }} so'm</span>
+        <div class="ts-item__ico"><AppIcon name="clock" :size="17" :stroke-width="2.2"/></div>
+        <div class="ts-item__body">
+          <div class="ts-item__lbl">Qarz</div>
+          <div class="ts-item__val">
+            {{ fmt(todaySales.reduce((s,x)=>s+Number(x.debt_sum||0),0)) }}
+            <span class="ts-item__cur">so'm</span>
+          </div>
+        </div>
       </div>
       <div class="ts-item ts-item--amber">
-        <span>Sotuvlar soni:</span>
-        <span>{{ todaySales.length }} ta</span>
+        <div class="ts-item__ico"><AppIcon name="shopping-cart" :size="17" :stroke-width="2.2"/></div>
+        <div class="ts-item__body">
+          <div class="ts-item__lbl">Sotuvlar soni</div>
+          <div class="ts-item__val">
+            {{ todaySales.length }}
+            <span class="ts-item__cur">ta</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1152,6 +1176,17 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 .ta-c   { text-align:center; }
 .ta-r   { text-align:right; }
 
+/* Ustun sarlavhasi katak bilan bir xil tomonga tekislansin.
+   `.rep-tbl thead th` da `text-align:left` bor va u aniqroq selektor
+   bo'lgani uchun `.ta-r` ni bekor qilardi — natijada "SUMMA" chapda,
+   raqamlar esa o'ngda turib, ustun qiyshiq ko'rinardi. */
+.rep-tbl thead th.ta-r { text-align:right; }
+.rep-tbl thead th.ta-c { text-align:center; }
+
+/* Pul ustunlari ortiqcha kengaymasin — raqamlar bir-biriga yaqin
+   turib, ko'z bilan solishtirish oson bo'lsin */
+.rep-tbl th.ta-r, .rep-tbl td.ta-r { width:1%; white-space:nowrap; }
+
 /* Badges */
 .doc-badge  { font-family:monospace; font-weight:800; color:#6366f1; background:#e0e7ff; padding:2px 7px; border-radius:5px; font-size:11.5px; }
 .cnt-badge  { background:#d1fae5; color:#065f46; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:700; }
@@ -1179,12 +1214,50 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 .cli-av   { width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#6366f1,#8b5cf6); color:white; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 
 /* Today summary */
-.today-summary { display:flex; gap:10px; padding:12px 24px; flex-shrink:0; flex-wrap:wrap; }
-.ts-item { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:10px 16px; border-radius:10px; font-size:13px; font-weight:600; flex:1; min-width:160px; }
-.ts-item--green  { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
-.ts-item--indigo { background:#eef2ff; color:#4338ca; border:1px solid #c7d2fe; }
-.ts-item--rose   { background:#fff1f2; color:#be123c; border:1px solid #fecdd3; }
-.ts-item--amber  { background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
+/* ── Pastdagi yig'indi paneli ──────────────────────────────────────
+   Ilgari ranglar juda och edi (#f0fdf4 — deyarli oq) va oq fonda
+   yo'qolib ketardi. Endi to'q, to'yingan ranglar + soya: kunlik
+   yakuniy raqamlar bir qarashda ko'zga tashlanadi. */
+.today-summary {
+  display:flex; gap:12px;
+  padding:14px 24px;
+  flex-shrink:0; flex-wrap:wrap;
+  background:#fff;
+  border-top:1px solid #e2e8f0;
+  box-shadow:0 -4px 16px rgba(15,23,42,.06);
+}
+.ts-item {
+  display:flex; align-items:center; gap:11px;
+  padding:12px 16px;
+  border-radius:12px;
+  flex:1; min-width:180px;
+  color:#fff;
+  box-shadow:0 3px 10px var(--ts-shadow, rgba(15,23,42,.18));
+}
+.ts-item__ico {
+  display:flex; align-items:center; justify-content:center;
+  width:36px; height:36px; flex-shrink:0;
+  background:rgba(255,255,255,.22);
+  border-radius:10px;
+}
+.ts-item__body { min-width:0; }
+.ts-item__lbl {
+  font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.05em;
+  color:rgba(255,255,255,.85);
+}
+.ts-item__val {
+  font-size:19px; font-weight:900; letter-spacing:-.02em;
+  line-height:1.15; margin-top:2px;
+  font-variant-numeric: tabular-nums;
+  white-space:nowrap;
+}
+.ts-item__cur { font-size:11.5px; font-weight:700; opacity:.85; }
+
+.ts-item--green  { background:linear-gradient(135deg,#10b981,#059669); --ts-shadow:rgba(16,185,129,.35); }
+.ts-item--indigo { background:linear-gradient(135deg,#6366f1,#4f46e5); --ts-shadow:rgba(99,102,241,.35); }
+.ts-item--rose   { background:linear-gradient(135deg,#f43f5e,#e11d48); --ts-shadow:rgba(244,63,94,.35); }
+.ts-item--amber  { background:linear-gradient(135deg,#f59e0b,#d97706); --ts-shadow:rgba(245,158,11,.35); }
 
 /* Cashier cards */
 .cashier-cards { display:flex; flex-direction:column; gap:8px; padding:16px 24px 8px; }
@@ -1383,8 +1456,13 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
   .rep-card__field > span:last-child { font-weight: 600; color: #1e293b; }
 
   /* ── Today summary ───────────────────────────────────────── */
-  .today-summary { padding: 8px 12px 12px; gap: 8px; }
-  .ts-item { min-width: 100%; font-size: 12.5px; padding: 10px 14px; }
+  /* Mobilda ikkitadan joylashadi — har biri alohida qator bo'lib
+     ekranni egallamasin */
+  .today-summary { padding: 10px 12px; gap: 8px; }
+  .ts-item { min-width: calc(50% - 4px); padding: 9px 11px; gap:8px; }
+  .ts-item__ico { width:30px; height:30px; }
+  .ts-item__val { font-size:15px; }
+  .ts-item__lbl { font-size:10px; }
 
   /* ── Cashier cards (already stacked) — tighten + animate ──── */
   .cashier-cards { padding: 10px 12px 6px; }
