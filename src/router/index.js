@@ -19,7 +19,9 @@ const routes = [
   { path: '/payments',   component: () => import('@/pages/Tolonlar.vue'),      meta: { title: 'Kassa',          module: 'payments' } },
   { path: '/returns',    component: () => import('@/pages/Qaytarishlar.vue'),  meta: { title: 'Qaytarishlar',   module: 'returns' } },
   { path: '/users',      component: () => import('@/pages/Users.vue'),         meta: { title: 'nav.users',      module: 'users' } },
-  { path: '/reports',    component: () => import('@/pages/Reports.vue'),       meta: { title: 'nav.reports',    module: 'reports' } },
+  // Hisobotlar to'liq ekranda ochiladi (Sotuv sahifasi kabi): jadvalda
+  // ko'proq satr ko'rinsin, chap menyu joy egallamasin.
+  { path: '/reports',    component: () => import('@/pages/Reports.vue'),       meta: { title: 'nav.reports',    module: 'reports', fullscreen: true } },
   { path: '/settings',   component: () => import('@/pages/Sozlamalar.vue'),    meta: { title: 'Sozlamalar',     module: 'settings' } },
   { path: '/dev',        component: () => import('@/pages/Dasturchi.vue'),     meta: { title: 'Dasturchi',      requiresDasturchi: true } },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

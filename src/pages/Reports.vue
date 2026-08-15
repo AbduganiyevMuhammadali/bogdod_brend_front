@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+
+// To'liq ekran rejimida chap menyu yo'q — orqaga qaytish uchun kerak
+const router = useRouter()
 import { reportsApi } from '@/api/reports.js'
 import { todayKey, fmtDateTime as fmtDate } from '@/composables/useDateTime.js'
 
@@ -15,6 +19,11 @@ const TABS = [
   { key: 'suppliers', label: 'Yetkazuvchi oldi-berdi', icon: 'truck'  },
 ]
 const tab = ref('today')
+
+// Yuqoridagi ko'rsatkich kartochkalari ko'p joy egallaydi va jadvalni
+// siqib qo'yadi. Yig'ib qo'yish mumkin — tanlov eslab qolinadi.
+const showCards = ref(localStorage.getItem('rep_show_cards') !== '0')
+watch(showCards, v => localStorage.setItem('rep_show_cards', v ? '1' : '0'))
 
 // ── Date range ───────────────────────────────────────────────────
 const today    = todayKey()
@@ -182,6 +191,10 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
   <!-- ── Page header ──────────────────────────────────────────── -->
   <div class="rep__hdr">
     <div class="rep__hdr-l">
+      <!-- To'liq ekran rejimida chap menyu yo'q — chiqish tugmasi shu yerda -->
+      <button class="rep__back" title="Bosh sahifaga qaytish" @click="router.push('/')">
+        <AppIcon name="arrow-left" :size="16"/>
+      </button>
       <div class="rep__hdr-ico"><AppIcon name="bar-chart-2" :size="18" :stroke-width="2"/></div>
       <div>
         <h1 class="rep__hdr-title">Hisobotlar</h1>
@@ -198,8 +211,31 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
     </div>
   </div>
 
-  <!-- ── Overview cards ───────────────────────────────────────── -->
-  <div v-if="overview" class="ov-cards">
+  <!-- ── Tabs — sarlavha ostida, eng tepada ─────────────────── -->
+  <div class="rep__tabs">
+    <button v-for="t in TABS" :key="t.key"
+      :class="['rep__tab', tab === t.key && 'rep__tab--on']"
+      @click="tab = t.key">
+      <AppIcon :name="t.icon" :size="14"/>
+      {{ t.label }}
+    </button>
+  </div>
+
+
+  <!-- ── Overview kartochkalari ──────────────────────────────────
+       Ko'p joy egallagani uchun yig'iladigan qilindi: jadval
+       ko'proq ko'rinsin. Holat localStorage da eslab qolinadi. -->
+  <div v-if="overview" class="ov-toggle">
+    <button class="ov-toggle__btn" @click="showCards = !showCards">
+      <AppIcon :name="showCards ? 'chevron-up' : 'chevron-down'" :size="13"/>
+      {{ showCards ? 'Ko\'rsatkichlarni yashirish' : 'Ko\'rsatkichlarni ko\'rsatish' }}
+    </button>
+    <span v-if="!showCards" class="ov-toggle__mini">
+      Bugun: <strong>{{ overview.today.sales_count }}</strong> sotuv ·
+      <strong>{{ fmt(overview.today.revenue) }}</strong> so'm
+    </span>
+  </div>
+  <div v-if="overview && showCards" class="ov-cards">
     <div class="ov-card ov-card--indigo">
       <div class="ov-card__ico"><AppIcon name="shopping-cart" :size="18"/></div>
       <div class="ov-card__body">
@@ -242,16 +278,6 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
     </div>
   </div>
 
-  <!-- ── Tabs ──────────────────────────────────────────────────── -->
-  <div class="rep__tabs">
-    <button v-for="t in TABS" :key="t.key"
-      :class="['rep__tab', tab === t.key && 'rep__tab--on']"
-      @click="tab = t.key">
-      <AppIcon :name="t.icon" :size="14"/>
-      {{ t.label }}
-    </button>
-  </div>
-
   <!-- ══ TODAY ════════════════════════════════════════════════════ -->
   <div v-if="tab === 'today'" class="rep__panel">
     <div class="panel__hdr">
@@ -281,7 +307,11 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
             <td class="ta-c">
               <span class="cnt-badge">{{ s.items?.length || 0 }} ta</span>
             </td>
-            <td class="ta-r c-bold">{{ fmt(s.total_sum) }} <span class="c-dim sm">so'm</span></td>
+            <td class="ta-r c-bold">
+              <span class="num">{{ fmt(s.net_sum ?? s.total_sum) }}</span>
+              <span class="unit">so'm</span>
+              <div v-if="Number(s.discount) > 0" class="disc-note">chegirma −{{ fmt(s.discount) }}</div>
+            </td>
             <td class="ta-r" style="color:#10b981;font-weight:600">{{ fmt(s.paid_sum) }}</td>
             <td class="ta-r">
               <span v-if="Number(s.debt_sum)>0" class="debt-badge">{{ fmt(s.debt_sum) }}</span>
@@ -295,7 +325,7 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
         <div v-for="(s, idx) in todaySales" :key="'m-'+s.id" class="rep-card" :style="{ '--d': idx*0.04+'s' }">
           <div class="rep-card__top">
             <span class="doc-badge">#{{ s.doc_number }}</span>
-            <span class="ta-r c-bold">{{ fmt(s.total_sum) }} <span class="c-dim sm">so'm</span></span>
+            <span class="ta-r c-bold">{{ fmt(s.net_sum ?? s.total_sum) }} <span class="c-dim sm">so'm</span></span>
           </div>
           <div class="rep-card__mid">
             <span class="c-bold">{{ s.client?.name || '—' }}</span>
@@ -317,7 +347,7 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
     <div v-if="todaySales.length" class="today-summary">
       <div class="ts-item ts-item--green">
         <span>Jami sotuv:</span>
-        <span>{{ fmt(todaySales.reduce((s,x)=>s+Number(x.total_sum||0),0)) }} so'm</span>
+        <span>{{ fmt(todaySales.reduce((s,x)=>s+Number(x.net_sum ?? x.total_sum ?? 0),0)) }} so'm</span>
       </div>
       <div class="ts-item ts-item--indigo">
         <span>To'langan:</span>
@@ -369,7 +399,7 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
             <td class="ta-c"><span class="cnt-badge">{{ p.sales_count }}</span></td>
             <td class="ta-r">{{ p.total_qty }} dona</td>
             <td class="ta-r c-dim">{{ fmt(p.avg_price) }}</td>
-            <td class="ta-r c-bold" style="color:#6366f1">{{ fmt(p.total_sum) }} <span class="sm c-dim">so'm</span></td>
+            <td class="ta-r c-bold" style="color:#6366f1"><span class="num">{{ fmt(p.total_sum) }}</span><span class="unit">so'm</span></td>
             <td>
               <div class="bar-wrap">
                 <div class="bar-fill" :style="{ width: (p.total_sum / maxProdSum * 100).toFixed(1)+'%' }"></div>
@@ -446,7 +476,7 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
             </td>
             <td class="c-dim">{{ c.phone || '—' }}</td>
             <td class="ta-c"><span class="cnt-badge">{{ c.sales_count }}</span></td>
-            <td class="ta-r c-bold">{{ fmt(c.total_sum) }} <span class="sm c-dim">so'm</span></td>
+            <td class="ta-r c-bold"><span class="num">{{ fmt(c.total_sum) }}</span><span class="unit">so'm</span></td>
             <td class="ta-r" style="color:#10b981;font-weight:600">{{ fmt(c.paid_sum) }}</td>
             <td class="ta-r">
               <span v-if="c.debt_sum > 0" class="debt-badge">{{ fmt(c.debt_sum) }}</span>
@@ -999,7 +1029,10 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 </template>
 
 <style scoped>
-.rep { display:flex; flex-direction:column; height:100%; background:#f4f6fb; overflow-y:auto; }
+/* Sahifa o'zi surilmaydi — sarlavha, tablar va kartochkalar joyida
+   qoladi, faqat jadval suriladi. Shunda ekranda ko'proq satr ko'rinadi
+   va tablar doim qo'l ostida turadi. */
+.rep { display:flex; flex-direction:column; height:100%; background:#f4f6fb; overflow:hidden; }
 
 /* Header */
 .rep__hdr { display:flex; align-items:center; justify-content:space-between; padding:20px 24px 14px; background:white; border-bottom:1px solid #e2e8f0; flex-shrink:0; gap:16px; flex-wrap:wrap; }
@@ -1017,21 +1050,44 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 .dr-btn:hover { background:#e0e7ff; }
 
 /* Overview cards */
-.ov-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; padding:16px 24px; flex-shrink:0; }
+/* Ko'rsatkichlarni yig'ish tugmasi */
+/* Orqaga qaytish tugmasi (to'liq ekran rejimi uchun) */
+.rep__back {
+  display:flex; align-items:center; justify-content:center;
+  width:34px; height:34px; flex-shrink:0;
+  color:#475569; background:#f1f5f9; border:1px solid #e2e8f0;
+  border-radius:9px; cursor:pointer;
+}
+.rep__back:hover { background:#e2e8f0; }
+
+.ov-toggle { display:flex; align-items:center; gap:12px; padding:8px 24px 0; flex-shrink:0; }
+.ov-toggle__btn {
+  display:flex; align-items:center; gap:5px;
+  padding:4px 10px; font-size:11.5px; font-weight:600; color:#64748b;
+  background:#f1f5f9; border:1px solid #e2e8f0; border-radius:7px;
+  cursor:pointer; font-family:inherit;
+}
+.ov-toggle__btn:hover { background:#e2e8f0; }
+/* Yig'ilgan holatda asosiy raqamlar baribir ko'rinib tursin */
+.ov-toggle__mini { font-size:12px; color:#64748b; }
+.ov-toggle__mini strong { color:#0f172a; }
+
+/* Kartochkalar biroz ixchamlashtirildi — jadvalga ko'proq joy qolsin */
+.ov-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; padding:10px 24px; flex-shrink:0; }
 @media(max-width:1200px) { .ov-cards { grid-template-columns:repeat(3,1fr); } }
-.ov-card { display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:14px; border:1.5px solid; background:white; }
+.ov-card { display:flex; align-items:center; gap:10px; padding:9px 13px; border-radius:11px; border:1.5px solid; background:white; }
 .ov-card--indigo { border-color:#c7d2fe; background:linear-gradient(135deg,#eef2ff,#fff); }
 .ov-card--green  { border-color:#a7f3d0; background:linear-gradient(135deg,#f0fdf4,#fff); }
 .ov-card--amber  { border-color:#fde68a; background:linear-gradient(135deg,#fffbeb,#fff); }
 .ov-card--rose   { border-color:#fecdd3; background:linear-gradient(135deg,#fff1f2,#fff); }
 .ov-card--violet { border-color:#e9d5ff; background:linear-gradient(135deg,#faf5ff,#fff); }
-.ov-card__ico { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ov-card__ico { width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .ov-card--indigo .ov-card__ico { background:#e0e7ff; color:#6366f1; }
 .ov-card--green  .ov-card__ico { background:#d1fae5; color:#10b981; }
 .ov-card--amber  .ov-card__ico { background:#fef3c7; color:#f59e0b; }
 .ov-card--rose   .ov-card__ico { background:#fce7f3; color:#f43f5e; }
 .ov-card--violet .ov-card__ico { background:#ede9fe; color:#8b5cf6; }
-.ov-card__val { font-size:22px; font-weight:900; color:#0f172a; letter-spacing:-.04em; line-height:1.1; }
+.ov-card__val { font-size:18px; font-weight:900; color:#0f172a; letter-spacing:-.03em; line-height:1.1; }
 .ov-card__lbl { font-size:11px; font-weight:600; color:#64748b; margin-top:2px; }
 .ov-card__sub { font-size:10.5px; color:#94a3b8; margin-top:2px; }
 
@@ -1043,7 +1099,7 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 .rep__tab--on { color:#6366f1; border-bottom-color:#6366f1; }
 
 /* Panel */
-.rep__panel { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.rep__panel { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
 .panel__hdr { display:flex; align-items:center; gap:10px; padding:14px 24px; background:white; border-bottom:1px solid #e2e8f0; flex-shrink:0; flex-wrap:wrap; }
 .panel__title { font-size:14px; font-weight:800; color:#1e293b; flex:none; }
 .panel__search { height:32px; padding:0 10px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:12.5px; font-family:inherit; outline:none; min-width:180px; }
@@ -1060,13 +1116,36 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 .rep__empty { display:flex; flex-direction:column; align-items:center; gap:10px; padding:60px; color:#94a3b8; font-size:13px; }
 
 /* Table */
-.tbl-wrap { flex:1; overflow:auto; padding:16px 24px 8px; }
+.tbl-wrap { flex:1; overflow:auto; padding:12px 24px 8px; min-height:0; }
+/* Uzun ro'yxatda ustun nomlari ko'rinib tursin — pastga surilganda
+   qaysi ustun nima ekani esdan chiqmasin */
+.tbl-wrap .rep-tbl thead th {
+  position:sticky; top:0; z-index:2;
+  background:#f8fafc;
+  box-shadow:inset 0 -1px 0 #e2e8f0;
+}
 .rep-tbl { width:100%; border-collapse:collapse; background:white; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.04); }
 .rep-tbl thead th { padding:9px 12px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; background:#f8fafc; border-bottom:1px solid #e2e8f0; text-align:left; white-space:nowrap; }
 .rep-row { border-bottom:1px solid #f1f5f9; transition:background .1s; }
 .rep-row:hover td { background:#f5f7ff; }
 .rep-row--cancelled { opacity:.55; }
 .rep-tbl td { padding:9px 12px; font-size:13px; vertical-align:middle; }
+
+/* ── Pul ustunlari ────────────────────────────────────────────────
+   Raqam va "so'm" bir qatorda turganda, turli uzunlikdagi summalar
+   bir-biriga nisbatan siljib ketardi (10,000 va 530,000 bir chiziqda
+   turmasdi). Endi raqam alohida blok — o'ng chetga tekislanadi, birlik
+   esa ostiga tushadi. `tabular-nums` barcha raqamlarga bir xil kenglik
+   beradi, shunda ustun ideal tekis ko'rinadi. */
+.rep-tbl .num {
+  display:block;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing:.01em;
+}
+.rep-tbl .unit { display:block; font-size:10.5px; font-weight:600; color:#94a3b8; margin-top:1px; }
+/* Barcha o'ngga tekislangan raqamli kataklar bir xil kenglikda bo'lsin */
+.rep-tbl td.ta-r, .rep-tbl th.ta-r { font-variant-numeric: tabular-nums; }
 .c-bold { font-weight:600; color:#1e293b; }
 .c-dim  { color:#94a3b8; }
 .sm     { font-size:11px; }
@@ -1077,6 +1156,8 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 .doc-badge  { font-family:monospace; font-weight:800; color:#6366f1; background:#e0e7ff; padding:2px 7px; border-radius:5px; font-size:11.5px; }
 .cnt-badge  { background:#d1fae5; color:#065f46; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:700; }
 .debt-badge { background:#fef2f2; color:#ef4444; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:700; }
+/* Chegirma izohi — summa nega yozilgan narxdan kichik ekani ko'rinsin */
+.disc-note { font-size:10.5px; font-weight:600; color:#f59e0b; margin-top:2px; }
 .pay-dot    { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:4px; vertical-align:middle; }
 .rank-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:6px; font-size:11px; font-weight:800; background:#f1f5f9; color:#64748b; }
 .rank-badge--1 { background:#fef3c7; color:#b45309; }
