@@ -47,7 +47,8 @@ export const CURRENCIES = ["So'm", 'USD', 'EUR', 'RUB']
 // Do'kondagi amaliyotga mos uchta raqamli tizim va bitta harfli tizim.
 export const SIZE_ALPHA = ['XS', 'S', 'M', 'L', 'XL', 'XXL',
                            '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', '9XL', '10XL']
-export const SIZE_JEANS   = ['29', '30', '31', '32', '33', '34']
+// 28 — kichik jinsi razmeri, do'konda kerak bo'ladi
+export const SIZE_JEANS   = ['28', '29', '30', '31', '32', '33', '34']
 export const SIZE_EVEN    = ['36', '38', '40', '42', '44', '46']
 export const SIZE_CLASSIC = ['44', '46', '48', '50', '52', '54', '56', '58', '60']
 

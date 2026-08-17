@@ -2365,6 +2365,14 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 .m-sheet-backdrop,
 .m-sheet { display: none; }
 
+/* `--bn-h` (pastki menyu balandligi) mobil media query ichida
+   belgilangan. `.m-cart-bar` esa uning tashqarisida joylashgani uchun
+   `bottom: calc(var(--bn-h) + 10px)` da o'zgaruvchi topilmay, butun
+   `calc()` yaroqsiz bo'lardi — natijada `bottom` umuman qo'llanmay,
+   savat paneli sahifa TEPASIGA chiqib, qidiruv maydonini to'sib
+   qo'yardi. Shuning uchun global zaxira qiymat beramiz. */
+:root { --bn-h: calc(64px + env(safe-area-inset-bottom, 0px)); }
+
 @media (max-width: 768px) {
 
   /* Bottom-nav height reserved by App.vue's BottomNav component */
@@ -2377,7 +2385,12 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
   .sp-ico{ display: none; }
 
   /* POS becomes a single full-bleed column; cart panel is hidden, replaced by bar+sheet */
-  .pos { flex-direction: column; }
+  /* `position: relative` (desktop uchun) mobilda olib tashlanadi.
+     U `position: fixed` bo'lgan savat panelini o'ziga bog'lab qo'yardi:
+     panel ekran pastiga emas, shu konteyner tepasiga yopishib, qidiruv
+     maydonini to'sardi. `static` bo'lsa `fixed` haqiqiy ekranga
+     nisbatan hisoblanadi va panel pastki menyu ustida turadi. */
+  .pos { flex-direction: column; position: static; }
   .pos__catalog { border-right: none; }
   .pos__cart { display: none; }
 
@@ -2435,7 +2448,13 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
     gap: 10px;
     position: fixed;
     left: 10px; right: 10px;
-    bottom: calc(var(--bn-h) + 10px);
+    /* Avval qat'iy zaxira qiymat (74px = 64px menyu + 10px oraliq).
+       Agar `--bn-h` biror sababga ko'ra aniqlanmasa yoki `env()`
+       qo'llab-quvvatlanmasa, brauzer shu qatorda qoladi va panel
+       baribir pastda turadi. Keyingi qator qo'llab-quvvatlansa, u
+       safe-area bilan aniqroq hisoblaydi. */
+    bottom: 74px;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 10px);
     z-index: 150;
     height: 58px;
     padding: 0 14px;

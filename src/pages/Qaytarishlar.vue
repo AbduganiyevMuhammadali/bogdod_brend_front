@@ -41,7 +41,17 @@ async function load() {
 }
 
 watch([tab, dateFrom, dateTo], () => { page.value = 1; load() })
-watch(search, () => { clearTimeout(timer); timer = setTimeout(() => { page.value = 1; load() }, 300) })
+watch(search, () => {
+  clearTimeout(timer)
+  qidirilgan.value = ''
+  timer = setTimeout(async () => {
+    page.value = 1
+    await load()
+    // Shtrix-kod skanerlanganda natija bitta bo'ladi — hujjatni
+    // darhol ochamiz, kassir qo'shimcha bosishlar qilmasin
+    await avtoOch()
+  }, 300)
+})
 onMounted(load)
 let timer = null
 
@@ -70,6 +80,10 @@ const showDetail = ref(false)
 const detail     = ref(null)
 const detailLoad = ref(false)
 
+// Qidiruvda ishlatilgan shtrix-kod/nom — hujjat ochilganda o'sha tovar
+// ajratib ko'rsatiladi, kassir uni ro'yxatdan izlab o'tirmasin
+const qidirilgan = ref('')
+
 async function openDetail(sale) {
   detailLoad.value = true
   showDetail.value = true
@@ -78,6 +92,36 @@ async function openDetail(sale) {
     detail.value = res
   } catch { detail.value = null }
   finally { detailLoad.value = false }
+}
+
+// Shtrix-kod shakllari (skaner boshidagi nolni tushirishi mumkin)
+function kodShakllari(kod) {
+  const t = String(kod || '').trim()
+  if (!t) return []
+  const out = [t]
+  if (/^\d+$/.test(t)) {
+    const asos = t.replace(/^0+/, '') || t
+    if (asos !== t) out.push(asos)
+    for (const n of [12, 13, 14]) if (asos.length < n) out.push(asos.padStart(n, '0'))
+  }
+  return [...new Set(out)]
+}
+
+// Shu satr qidirilgan tovarmi
+function izlangan(item) {
+  const q = qidirilgan.value.trim()
+  if (!q) return false
+  const kodlar = kodShakllari(q)
+  if (item.barcode && kodlar.includes(String(item.barcode).trim())) return true
+  return String(item.productName || '').toLowerCase().includes(q.toLowerCase())
+}
+
+// Qidiruv natijasida BITTA hujjat topilsa — uni darhol ochamiz.
+// Kassir tovar yorlig'ini skanerlaydi va hujjat o'zi ochiladi.
+async function avtoOch() {
+  if (!search.value.trim() || sales.value.length !== 1) return
+  qidirilgan.value = search.value.trim()
+  await openDetail(sales.value[0])
 }
 
 // ── Stats ──────────────────────────────────────────────────────────
@@ -104,7 +148,7 @@ const TABS = [
         <h2 class="page__title">Qaytarishlar</h2>
         <div class="page__search">
           <AppIcon name="search" :size="13" class="page__search-ico"/>
-          <input v-model="search" class="page__search-inp" placeholder="Hujjat #, mijoz..."/>
+          <input v-model="search" class="page__search-inp" placeholder="Shtrix-kod skanerlang yoki hujjat #, mijoz, tovar nomi..."/>
           <button v-if="search" class="page__search-clr" @click="search=''">
             <AppIcon name="x" :size="11" :stroke-width="2.5"/>
           </button>
@@ -241,8 +285,13 @@ const TABS = [
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in detail.items" :key="item.id" class="dtable__row">
-                    <td>{{ item.productName }}</td>
+                  <tr v-for="item in detail.items" :key="item.id"
+                      class="dtable__row" :class="{ 'row-found': izlangan(item) }">
+                    <td>
+                      <span v-if="izlangan(item)" class="found-tag">Qidirilgan</span>
+                      {{ item.productName }}
+                      <div v-if="item.barcode" class="item-bc">{{ item.barcode }}</div>
+                    </td>
                     <td class="ta-r">{{ item.qty }}</td>
                     <td class="ta-r">{{ fmt(item.price) }}</td>
                     <td class="ta-r">{{ fmt(item.totalSum) }}</td>
@@ -329,6 +378,15 @@ const TABS = [
 .page__empty { display:flex; flex-direction:column; align-items:center; gap:12px; padding:60px 20px; color:var(--color-text-3); font-size:13px; }
 .dtable { width:100%; border-collapse:collapse; }
 .dtable thead th { padding:7px 12px; font-size:10.5px; font-weight:700; color:var(--color-text-3); text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--color-border); text-align:left; }
+/* Qidirilgan tovar satri — kassir uni ro'yxatdan izlab o'tirmasin */
+.row-found td { background:#ecfdf5 !important; box-shadow:inset 3px 0 0 #10b981; }
+.found-tag {
+  display:inline-block; margin-right:6px; padding:1px 7px;
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  color:#047857; background:#d1fae5; border-radius:20px; vertical-align:middle;
+}
+.item-bc { font-size:10.5px; color:#94a3b8; margin-top:2px; font-variant-numeric:tabular-nums; }
+
 .dtable__row { cursor:pointer; transition:background var(--t-fast); }
 .dtable__row:hover td { background:var(--slate-50); }
 .dtable__row td { padding:10px 12px; border-bottom:1px solid var(--color-border); vertical-align:middle; }
