@@ -23,14 +23,24 @@ const LIMIT       = 50
 async function load() {
   loading.value = true
   try {
+    const q = search.value.trim()
+
+    // Shtrix-kod bo'yicha qidirilganda sana filtri QO'LLANMAYDI.
+    // Mijoz tovarni bir hafta oldin ham sotib olgan bo'lishi mumkin —
+    // kassir uni qaysi kuni sotilganini bilmaydi va bilishi ham shart
+    // emas. Nom yoki hujjat raqami bo'yicha qidiruvda ham shunday:
+    // qidirilayotgan bo'lsa, butun tarixdan izlaymiz.
     const params = {
-      status:    tab.value,
-      date_from: dateFrom.value,
-      date_to:   dateTo.value,
-      page:      page.value,
-      limit:     LIMIT,
+      status: tab.value,
+      page:   page.value,
+      limit:  LIMIT,
     }
-    if (search.value.trim()) params.search = search.value.trim()
+    if (q) {
+      params.search = q
+    } else {
+      params.date_from = dateFrom.value
+      params.date_to   = dateTo.value
+    }
     const res = await salesApi.getAll(params)
     sales.value = res.data
     total.value = res.total
@@ -155,9 +165,17 @@ const TABS = [
         </div>
       </div>
       <div class="date-range">
-        <input type="date" v-model="dateFrom" class="date-inp"/>
-        <span class="date-sep">—</span>
-        <input type="date" v-model="dateTo"   class="date-inp"/>
+        <!-- Qidiruv vaqtida sana filtri qo'llanmaydi (butun tarixdan
+             izlanadi) — buni ko'rsatib turamiz, aks holda "nega sana
+             ishlamayapti?" degan chalkashlik bo'ladi -->
+        <span v-if="search.trim()" class="date-off">
+          <AppIcon name="search" :size="11"/> Butun tarix bo'yicha
+        </span>
+        <template v-else>
+          <input type="date" v-model="dateFrom" class="date-inp"/>
+          <span class="date-sep">—</span>
+          <input type="date" v-model="dateTo"   class="date-inp"/>
+        </template>
       </div>
     </div>
 
@@ -386,6 +404,8 @@ const TABS = [
   color:#047857; background:#d1fae5; border-radius:20px; vertical-align:middle;
 }
 .item-bc { font-size:10.5px; color:#94a3b8; margin-top:2px; font-variant-numeric:tabular-nums; }
+
+.date-off { display:inline-flex; align-items:center; gap:5px; padding:6px 12px; font-size:12px; font-weight:600; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; white-space:nowrap; }
 
 .dtable__row { cursor:pointer; transition:background var(--t-fast); }
 .dtable__row:hover td { background:var(--slate-50); }

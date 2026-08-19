@@ -341,9 +341,9 @@ function fmt(v) { return new Intl.NumberFormat('uz-UZ').format(v) }
 
             <div class="sz-preset-group">
               <span class="sz-preset-label">To'plam:</span>
-              <button class="sz-range-btn" @click="addSizeSet(SIZE_JEANS)">Jinsi 29–34</button>
+              <button class="sz-range-btn" @click="addSizeSet(SIZE_JEANS)">Jinsi 28–34</button>
               <button class="sz-range-btn" @click="addSizeSet(SIZE_EVEN)">Shim 36–46</button>
-              <button class="sz-range-btn" @click="addSizeSet(SIZE_CLASSIC)">Klassik 44–60</button>
+              <button class="sz-range-btn" @click="addSizeSet(SIZE_CLASSIC)">Klassik 44–68</button>
               <button class="sz-range-btn" @click="addSizeSet(SIZE_ALPHA)">Harfli S–10XL</button>
             </div>
           </div>

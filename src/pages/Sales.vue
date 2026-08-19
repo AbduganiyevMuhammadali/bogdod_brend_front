@@ -18,6 +18,7 @@ import { fmtDate, fmtTime, fmtDateTime, todayKey } from '@/composables/useDateTi
 const route  = useRoute()
 const router = useRouter()
 
+
 // ── Currency settings (from localStorage) ────────────────────────
 const POS_SETTINGS_KEY = 'pos_settings'
 function loadPosSettings() {
@@ -170,6 +171,14 @@ function textColor(idx) { return TEXT_COLORS[idx % TEXT_COLORS.length] }
 
 // ── Cart ─────────────────────────────────────────────────────────
 const cart        = ref([])
+// Chapdagi logotip — Tezkor kiritishga o'tish. Sotuv to'liq ekranda
+// ochilgani uchun chap menyu yo'q, chiqish yo'li shu.
+// Savatda tovar bo'lsa tasodifan chiqib ketilmasin.
+function tezkorgaOt() {
+  if (cart.value.length &&
+      !confirm(`Savatda ${cart.value.length} ta tovar bor. Chiqsangiz ular yo'qoladi.\n\nDavom etasizmi?`)) return
+  router.push('/tezkor')
+}
 const activeIdx   = ref(-1)
 const priceType   = ref('chakana')
 const paymentType = ref('Naqd')
@@ -790,7 +799,16 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 
   <!-- Narrow icon sidebar -->
   <aside class="sp-ico">
-    <div class="sp-ico__logo"><AppIcon name="shopping-cart" :size="18" :stroke-width="2.5"/></div>
+    <!-- Logotip — Tezkor kiritishga o'tish tugmasi. Sotuv oynasi
+         to'liq ekranda ochilgani uchun chap menyu yo'q, shuning uchun
+         bu yerdan chiqib ketish yo'li kerak. -->
+    <button
+      class="sp-ico__logo sp-ico__logo--btn"
+      title="Tezkor kiritishga o'tish"
+      @click="tezkorgaOt"
+    >
+      <AppIcon name="shopping-cart" :size="18" :stroke-width="2.5"/>
+    </button>
     <nav class="sp-ico__nav">
       <button :class="['ico-btn',mode==='pos'&&'ico-btn--on']"     @click="mode='pos'"     title="POS"><AppIcon name="monitor"     :size="18"/></button>
       <button :class="['ico-btn',mode==='history'&&'ico-btn--on']" @click="mode='history'" title="Tarix"><AppIcon name="list"      :size="18"/></button>
@@ -2090,6 +2108,10 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 /* Icon sidebar */
 .sp-ico{width:54px;flex-shrink:0;background:linear-gradient(175deg,#1e1b4b 0%,#1a1740 60%,#16143a 100%);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;border-right:1px solid rgba(99,102,241,.15)}
 .sp-ico__logo{width:38px;height:38px;flex-shrink:0;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;margin-bottom:8px}
+/* Logotip endi tugma — bosiladigan ekani bilinib tursin */
+.sp-ico__logo--btn{border:none;padding:0;cursor:pointer;font-family:inherit;transition:transform .15s,box-shadow .15s}
+.sp-ico__logo--btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,.45)}
+.sp-ico__logo--btn:active{transform:scale(.95)}
 .sp-ico__nav{display:flex;flex-direction:column;gap:4px;flex:1}
 .sp-ico__bot{padding-top:8px;border-top:1px solid rgba(99,102,241,.15);display:flex;flex-direction:column;align-items:center;gap:4px}
 .ico-btn{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(199,210,254,.6);cursor:pointer;transition:all .15s}

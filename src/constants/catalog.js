@@ -50,7 +50,9 @@ export const SIZE_ALPHA = ['XS', 'S', 'M', 'L', 'XL', 'XXL',
 // 28 — kichik jinsi razmeri, do'konda kerak bo'ladi
 export const SIZE_JEANS   = ['28', '29', '30', '31', '32', '33', '34']
 export const SIZE_EVEN    = ['36', '38', '40', '42', '44', '46']
-export const SIZE_CLASSIC = ['44', '46', '48', '50', '52', '54', '56', '58', '60']
+// Klassik razmerlar 68 gacha — katta o'lchamli kostyum/shim uchun
+export const SIZE_CLASSIC = ['44', '46', '48', '50', '52', '54', '56', '58', '60',
+                             '62', '64', '66', '68']
 
 // Raqamli tugmalar qatori — uchala to'plamning birlashmasi, takrorsiz
 export const SIZE_NUM = [...new Set([...SIZE_JEANS, ...SIZE_EVEN, ...SIZE_CLASSIC])]

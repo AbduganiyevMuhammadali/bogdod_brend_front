@@ -925,9 +925,9 @@ function docLabelCount(d) {
                       <em>— tanlansa, har biri alohida mahsulot bo'lib yaratiladi</em>
                     </div>
                     <div class="qi__sets">
-                      <button class="qi__set" @click="addSizeSet(r, SIZE_JEANS)">Jinsi 29–34</button>
+                      <button class="qi__set" @click="addSizeSet(r, SIZE_JEANS)">Jinsi 28–34</button>
                       <button class="qi__set" @click="addSizeSet(r, SIZE_EVEN)">Shim 36–46</button>
-                      <button class="qi__set" @click="addSizeSet(r, SIZE_CLASSIC)">Klassik 44–60</button>
+                      <button class="qi__set" @click="addSizeSet(r, SIZE_CLASSIC)">Klassik 44–68</button>
                       <button class="qi__set" @click="addSizeSet(r, SIZE_ALPHA)">Harfli S–10XL</button>
                       <button class="qi__set" @click="addSizeSet(r, SIZE_SHOES)">Oyoq kiyim 35–46</button>
                       <button v-if="r.sizes.length" class="qi__set qi__set--clear" @click="clearSizes(r)">Tozalash</button>
