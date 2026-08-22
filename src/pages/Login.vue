@@ -5,6 +5,8 @@ import AppIcon from '@/components/AppIcon.vue'
 import { login, logout } from '@/composables/useAuth.js'
 import { API_URL as apiUrl } from '@/api/http.js'
 import { firstAllowedPath } from '@/router/index.js'
+import { showToast } from '@/composables/useToast.js'
+import { beep } from '@/composables/useBeep.js'
 
 const router   = useRouter()
 const username = ref('')
@@ -15,9 +17,6 @@ const error    = ref('')
 
 const diag     = ref('')
 const diagBusy = ref(false)
-
-// Build vaqti vite.config.js da __BUILD_TIME__ orqali kiritiladi.
-const buildTag = `build ${__BUILD_TIME__} · ${apiUrl.replace(/^https?:\/\//, '').replace(/\/api\/v\d+$/, '')}`
 
 // Serverga yetib borish-bormasligini bosqichma-bosqich tekshiradi. axios emas,
 // to'g'ridan-to'g'ri fetch ishlatamiz — shunda xato axios qatlamida
@@ -57,18 +56,41 @@ async function runDiag() {
   diagBusy.value = false
 }
 
+// Kunning vaqtiga qarab salomlashuv — quruq "Xush kelibsiz" dan
+// tabiiyroq eshitiladi.
+function salomlashuv(user) {
+  const ism = [user?.name, user?.surname].filter(Boolean).join(' ').trim()
+             || user?.login || ''
+  const soat = new Date().getHours()
+  const salom = soat < 6  ? 'Xayrli tun'
+              : soat < 12 ? 'Xayrli tong'
+              : soat < 18 ? 'Xayrli kun'
+              :             'Xayrli kech'
+  return ism
+    ? `${salom}, ${ism}! Sellz'ga xush kelibsiz`
+    : `${salom}! Sellz'ga xush kelibsiz`
+}
+
 async function submit() {
   if (!username.value.trim() || !password.value) return
   loading.value = true
   error.value   = ''
   try {
-    await login(username.value.trim(), password.value)
+    const user = await login(username.value.trim(), password.value)
     const target = firstAllowedPath()
     if (!target) {
       logout()
       error.value = "Sizga hech qanday bo'lim ochilmagan. Administratorga murojaat qiling."
       return
     }
+    // Salomlashuv — ovoz va bildirishnoma.
+    //
+    // Ovoz `submit()` ichida, ya'ni foydalanuvchi bosgan tugma
+    // hodisasidan keyin chalinadi: brauzer avtomatik ovozni bloklaydi,
+    // faqat foydalanuvchi harakatidan keyin ruxsat beradi.
+    beep('welcome')
+    showToast(salomlashuv(user), 'ok', 4000)
+
     router.push(target)
   } catch (e) {
     // Server javob bergan bo'lsa — uning xabarini ko'rsatamiz (401 = parol xato).
@@ -97,17 +119,7 @@ async function submit() {
 
       <!-- Logo -->
       <div class="login-card__logo">
-        <div class="login-card__logo-mark">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/>
-            <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="1.8"
-                  stroke-opacity="0.75" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div>
-          <p class="login-card__brand">SellZ POS</p>
-          <p class="login-card__brand-sub">Savdo boshqaruv tizimi</p>
-        </div>
+        <img src="@/assets/logo.png" alt="Sellz POS" class="login-card__logo-img"/>
       </div>
 
       <!-- Heading -->
@@ -176,15 +188,6 @@ async function submit() {
 
       </form>
 
-      <p class="login-card__hint">
-        <AppIcon name="info" :size="12" /> Standart: <strong>Admin</strong> / <strong>123456</strong>
-      </p>
-
-      <!-- Qaysi build o'rnatilganini va qaysi serverga ulanayotganini
-           bir qarashda bilish uchun. Yangi APK o'rnatilganini shu yerdan
-           tekshirsa bo'ladi. -->
-      <p class="login-card__build">{{ buildTag }}</p>
-
     </div>
   </div>
 </template>
@@ -223,45 +226,42 @@ async function submit() {
   max-width: 400px;
   background: rgba(255,255,255,0.97);
   border-radius: 24px;
-  padding: 36px 32px 28px;
+  padding: 32px 32px 30px;
   box-shadow: 0 24px 64px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.1);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  /* Oraliq 18px: logotip -> sarlavha -> forma zich va uyg'un tursin.
+     24px da logotip bilan sarlavha orasi uzilib qolardi. */
+  gap: 18px;
   position: relative;
   z-index: 1;
 }
 
-/* Logo */
+/* Logo — kartaning eng tepasida, markazda.
+   Butun karta shu belgi atrofida markazlashtirilgan: sarlavha, matn va
+   pastdagi build yozuvi ham bir o'qda turadi. */
 .login-card__logo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  margin-bottom: 2px;
 }
-.login-card__logo-mark {
-  width: 44px; height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(99,102,241,0.45);
-}
-.login-card__brand {
-  font-size: 17px; font-weight: 900;
-  color: #0f172a;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-}
-.login-card__brand-sub {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 2px;
+.login-card__logo-img {
+  /* Logotip nisbati 3.34:1 (828x248) — balandlik bo'yicha cheklaganda
+     kenglik uch barobar katta chiqadi. 44px da ~147px bo'ladi va
+     400px kartada muvozanatli ko'rinadi. Ilgari 64px edi va logotip
+     kartaning yarmidan ko'pini egallardi. */
+  height: 44px;
+  max-width: 60%;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 /* Heading */
-.login-card__hd { display: flex; flex-direction: column; gap: 4px; }
+.login-card__hd { display: flex; flex-direction: column; gap: 5px; text-align: center; }
 .login-card__title {
-  font-size: 22px; font-weight: 800;
+  font-size: 20px; font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.04em;
 }
@@ -319,13 +319,6 @@ async function submit() {
   color: #e11d48;
 }
 
-.login-card__build {
-  margin-top: 6px;
-  text-align: center;
-  font-size: 10.5px;
-  color: #94a3b8;
-  letter-spacing: .2px;
-}
 
 .lf__diag { display: flex; flex-direction: column; gap: 8px; }
 
@@ -378,11 +371,4 @@ async function submit() {
   animation: spin 0.7s linear infinite;
 }
 
-.login-card__hint {
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  font-size: 11.5px;
-  color: #94a3b8;
-  text-align: center;
-}
-.login-card__hint strong { color: #475569; }
 </style>

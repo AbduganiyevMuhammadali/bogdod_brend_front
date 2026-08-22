@@ -62,15 +62,6 @@ function kunQosh(n) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
-const DUE_QUICK = [
-  { nom: 'Bugun',   kun: 0  },
-  { nom: 'Ertaga',  kun: 1  },
-  { nom: '3 kun',   kun: 3  },
-  { nom: '1 hafta', kun: 7  },
-  { nom: '2 hafta', kun: 14 },
-  { nom: '1 oy',    kun: 30 },
-]
-
 // Standart: bir hafta. Kassir odatda shu muddatni beradi, kerak bo'lsa
 // bir bosishda o'zgartiradi.
 const dueDate = ref(kunQosh(7))
@@ -338,20 +329,17 @@ function printReceipt() {
             Qarzga: <strong>{{ fmt(debtSum) }} so'm</strong> · {{ selectedClient?.name }}
           </div>
 
-          <!-- Qarzni qaytarish muddati. Har sotuvga alohida belgilanadi,
-               shuning uchun mijozda bir necha qarz bo'lsa ham chalkashmaydi. -->
+          <!-- Qarz muddati DebtModal da tanlanadi ("Qarz" bosilganda).
+               Bu yerda faqat tasdiq uchun ko'rsatiladi — ikki joyda
+               so'ralsa kassir qaysi biri kuchda ekanini bilmay qolardi.
+               Kerak bo'lsa shu yerdan ham o'zgartirsa bo'ladi. -->
           <div v-if="debtSum > 0" class="pm-due">
             <div class="pm-due__lbl">
               <AppIcon name="calendar" :size="12"/> Qarz qaytarish sanasi
             </div>
-            <div class="pm-due__quick">
-              <button v-for="q in DUE_QUICK" :key="q.kun"
-                      class="pm-due__q" :class="{ on: dueDate === kunQosh(q.kun) }"
-                      @click="dueDate = kunQosh(q.kun)">{{ q.nom }}</button>
-            </div>
             <input v-model="dueDate" type="date" class="pm-due__inp" :min="bugunKey()" />
             <div v-if="dueDate" class="pm-due__info">{{ dueLabel }}</div>
-            <div v-else class="pm-due__warn">Sana belgilanmasa, muddatsiz qarz bo'ladi</div>
+            <div v-else class="pm-due__warn">Sana belgilanmagan — muddatsiz qarz</div>
           </div>
 
           <div v-if="saveErr" class="pm-err-box">{{ saveErr }}</div>

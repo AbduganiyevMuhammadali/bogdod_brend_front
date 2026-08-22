@@ -3,6 +3,7 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon        from '@/components/AppIcon.vue'
 import SalePayModal   from '@/components/sales/SalePayModal.vue'
+import DebtModal      from '@/components/sales/DebtModal.vue'
 import BarcodeScannerModal from '@/components/sales/BarcodeScannerModal.vue'
 import { salesApi }    from '@/api/sales.js'
 import { productsApi }  from '@/api/products.js'
@@ -250,8 +251,52 @@ function setPrice(item, v) {
 const totalSum   = computed(() => cart.value.reduce((s,i) => s+(Number(i.totalSum)||0), 0))
 const payableSum = computed(() => Math.max(0, totalSum.value - (Number(discount.value)||0)))
 const debtSum    = computed(() => paymentType.value === 'Qarz' ? payableSum.value : 0)
-// Qarz qaytarish muddati — to'lov oynasidan keladi (SalePayModal)
+// Qarz qaytarish muddati — DebtModal da tanlanadi
 const dueDate    = ref(null)
+
+// ── Qarzga sotish oynasi ──────────────────────────────────────────
+// "Qarz" tanlanganda darhol ochiladi: mijoz va muddat bir joyda
+// so'raladi. Shunda kassir mijozni tanlashni unutib qo'ymaydi va
+// yakunlashda "Qarz uchun mijoz tanlang" degan to'siqqa duch kelmaydi.
+// `showDebtModal` nomi allaqachon qarz TO'LASH oynasida band —
+// bu esa qarzga SOTISH oynasi, shuning uchun boshqa nom.
+const showQarzSotuv = ref(false)
+
+// "Qarz" tanlanganda mijoz va muddat so'raladigan oyna ochiladi.
+// Qolgan to'lov turlari to'g'ridan-to'g'ri qo'llanadi.
+//
+// Bu ikkala joydan ham chaqiriladi: savat panelidagi tugmalardan va
+// to'lov oynasi ichidagi tugmalardan — shunda qaysi biri bosilsa ham
+// mijoz tanlash bosqichi o'tkazib yuborilmaydi.
+function tolovTuriTanla(pt) {
+  if (pt === 'Qarz') {
+    if (!cart.value.length) { flashErr("Avval savatga tovar qo'shing"); return }
+    showQarzSotuv.value = true
+    return
+  }
+  // Boshqa turga o'tilsa qarz ma'lumotlari keraksiz bo'ladi
+  if (paymentType.value === 'Qarz') dueDate.value = null
+  paymentType.value = pt
+}
+
+function qarzTasdiqla({ client, dueDate: sana }) {
+  selectedClient.value = client
+  clientQ.value        = client?.name || ''
+  dueDate.value        = sana
+  paymentType.value    = 'Qarz'
+  showQarzSotuv.value  = false
+}
+
+function qarzBekor() {
+  showQarzSotuv.value = false
+  // Mijoz tanlanmagan bo'lsa qarzga sotib bo'lmaydi — naqdga qaytamiz.
+  // Mijoz allaqachon tanlangan bo'lsa (oynani shunchaki muddatni
+  // ko'rish uchun ochgan bo'lsa) tanlov saqlanadi.
+  if (paymentType.value === 'Qarz' && !selectedClient.value) {
+    paymentType.value = 'Naqd'
+    dueDate.value = null
+  }
+}
 const itemsCount = computed(() => cart.value.reduce((s,i) => s+i.qty, 0))
 
 // Rounding discount chips: how much to cut so payable becomes a clean number
@@ -1051,7 +1096,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
       <!-- ── Payment type ───────────────────────────────── -->
       <div class="cart__pay-type">
         <button v-for="pt in ['Naqd','Karta',&quot;O\'tkazma&quot;,'Qarz']" :key="pt"
-          :class="['pt-chip', paymentType===pt && 'pt-chip--on']" @click="paymentType=pt">
+          :class="['pt-chip', paymentType===pt && 'pt-chip--on']" @click="tolovTuriTanla(pt)">
           <AppIcon :name="PAY_ICONS[pt]" :size="11"/>{{ pt }}
         </button>
       </div>
@@ -1241,7 +1286,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
         <!-- Payment type -->
         <div class="cart__pay-type">
           <button v-for="pt in ['Naqd','Karta',&quot;O\'tkazma&quot;,'Qarz']" :key="pt"
-            :class="['pt-chip', paymentType===pt && 'pt-chip--on']" @click="paymentType=pt">
+            :class="['pt-chip', paymentType===pt && 'pt-chip--on']" @click="tolovTuriTanla(pt)">
             <AppIcon :name="PAY_ICONS[pt]" :size="11"/>{{ pt }}
           </button>
         </div>
@@ -1649,6 +1694,17 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 
 
   <!-- PAYMENT MODAL -->
+  <!-- Qarzga sotish: mijoz + muddat bir oynada -->
+  <Teleport to="body">
+    <DebtModal
+      v-if="showQarzSotuv"
+      :debt-sum="payableSum"
+      :client="selectedClient"
+      @close="qarzBekor"
+      @confirm="qarzTasdiqla"
+    />
+  </Teleport>
+
   <SalePayModal
     v-if="showPayModal"
     :cart="cart"
@@ -1668,7 +1724,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
     @close="showPayModal=false"
     @complete="completeSale"
     @update:discount="discount=$event"
-    @update:payment-type="paymentType=$event"
+    @update:payment-type="tolovTuriTanla($event)"
     @update:due-date="dueDate=$event"
     @drop-client="dropClient"
   />

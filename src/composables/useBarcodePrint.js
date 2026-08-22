@@ -15,8 +15,19 @@ export function genBarcode() {
 // raqami). EAN-13 do'kon skanerlari uchun standart va CODE128 dan ixcham —
 // tor yorliqqa yaxshiroq sig'adi. Qo'lda kiritilgan yoki boshqa uzunlikdagi
 // kodlar EAN-13 ga to'g'ri kelmaydi, ular uchun CODE128 ga qaytamiz.
+// Kodni chizishdan oldin tozalaymiz.
+//
+// Bazaga kod bo'sh joy, ko'rinmas belgi (\u200b) yoki yangi qator bilan
+// tushib qolishi mumkin (nusxa-ko'chirish, Excel import). Tozalanmasa
+// `isValidEan13` uni rad etadi va CODE128 ga o'tiladi — u esa 13 xonali
+// raqam uchun ancha KENG chiqadi, chiziqlar siqiladi va arzon termal
+// printerda skaner o'qiy olmaydi.
+function tozala(code) {
+  return String(code ?? '').replace(/[^0-9A-Za-z._-]/g, '')
+}
+
 function isValidEan13(code) {
-  const s = String(code || '')
+  const s = tozala(code)
   if (!/^\d{13}$/.test(s)) return false
   const sum = s.slice(0, 12).split('').reduce(
     (a, d, i) => a + Number(d) * (i % 2 === 0 ? 1 : 3), 0
@@ -24,7 +35,8 @@ function isValidEan13(code) {
   return ((10 - (sum % 10)) % 10) === Number(s[12])
 }
 
-function barcodeToPng(code, opts = {}) {
+function barcodeToPng(rawCode, opts = {}) {
+  const code = tozala(rawCode)
   const canvas = document.createElement('canvas')
   const base = {
     width: 2,
@@ -36,12 +48,21 @@ function barcodeToPng(code, opts = {}) {
   }
 
   const useEan = isValidEan13(code)
+
+  // EAN-13 doim 95 modul — tor yorliqqa aniq sig'adi. CODE128 esa
+  // uzunlikka qarab kengayadi, shuning uchun unga biroz tor chiziq
+  // beramiz (aks holda yorliqdan chiqib ketadi yoki siqiladi).
+  const cfg = useEan
+    ? { ...base, format: 'EAN13' }
+    : { ...base, format: 'CODE128', width: Math.max(1.4, (base.width || 2) * 0.75) }
+
   try {
-    JsBarcode(canvas, code, { ...base, format: useEan ? 'EAN13' : 'CODE128' })
+    JsBarcode(canvas, code, cfg)
   } catch {
     try {
       // EAN13 rad etsa — CODE128 deyarli har qanday matnni qabul qiladi
-      JsBarcode(canvas, code, { ...base, format: 'CODE128' })
+      JsBarcode(canvas, code, { ...base, format: 'CODE128',
+        width: Math.max(1.4, (base.width || 2) * 0.75) })
     } catch {
       // Bo'sh/yaroqsiz bo'lsa ham chop etish to'xtab qolmasin
       JsBarcode(canvas, '0000000000000', { ...base, format: 'CODE128' })
@@ -188,7 +209,7 @@ function labelHtml58x40(item) {
       <div class="lb__name ${nameClass}">${escapeHtml(name)}</div>
       ${priceHtml}
       <img class="lb__bc" src="${png}" />
-      <div class="lb__code">${escapeHtml(item.barcode)}</div>
+      <div class="lb__code">${escapeHtml(tozala(item.barcode))}</div>
     </div></div>`
 }
 

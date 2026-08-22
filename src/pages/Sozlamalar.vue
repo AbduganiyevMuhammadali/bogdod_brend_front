@@ -1,7 +1,8 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { backupApi } from '@/api/backup.js'
+import { botApi } from '@/api/bot.js'
 import { showToast } from '@/composables/useToast.js'
 
 const STORAGE_KEY = 'pos_settings'
@@ -68,9 +69,66 @@ async function downloadBackup() {
   }
 }
 
+// ── Telegram bot ────────────────────────────────────────────────────
+// Do'kon 6 xonali kod yasaydi, egasi uni botga yuboradi. Kod 5 daqiqa
+// amal qiladi va bir marta ishlatiladi — Telegram'da parol yozilmaydi.
+const botLinks   = ref([])
+const botCode    = ref('')
+const botExpires = ref(null)
+const botBusy    = ref(false)
+const botQoldi   = ref(0)
+let botTimer = null
+
+async function loadBotLinks() {
+  try { botLinks.value = await botApi.getLinks() } catch { /* huquq yo'q */ }
+}
+
+async function kodOl() {
+  botBusy.value = true
+  try {
+    const r = await botApi.createCode()
+    botCode.value = r.code
+    botExpires.value = new Date(r.expires_at)
+    sanoqBoshla()
+    showToast('Kod yaratildi — 5 daqiqa ichida botga yuboring', 'ok')
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'Kod olishda xatolik', 'err')
+  } finally { botBusy.value = false }
+}
+
+// Qolgan vaqtni sanab turamiz — kod qachon eskirishi ko'rinsin
+function sanoqBoshla() {
+  clearInterval(botTimer)
+  const yangila = () => {
+    if (!botExpires.value) return
+    const q = Math.max(0, Math.round((botExpires.value - Date.now()) / 1000))
+    botQoldi.value = q
+    if (q === 0) { botCode.value = ''; clearInterval(botTimer) }
+  }
+  yangila()
+  botTimer = setInterval(yangila, 1000)
+}
+const botQoldiMatn = computed(() => {
+  const m = Math.floor(botQoldi.value / 60)
+  const s = botQoldi.value % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+})
+
+async function botUzish(link) {
+  if (!confirm(`"${link.chat_name || link.chat_id}" bog'lanishi uzilsinmi?`)) return
+  try {
+    await botApi.unlink(link.id)
+    await loadBotLinks()
+    showToast('Bog\'lanish uzildi', 'ok')
+  } catch { showToast('Xatolik', 'err') }
+}
+
+onUnmounted(() => clearInterval(botTimer))
+
 onMounted(() => {
   loadSettings()
   loadBackupInfo()
+  loadBotLinks()
 })
 
 const SECTIONS = [
@@ -307,6 +365,54 @@ const activeSection = ref('store')
             <code>mysql-client</code> o'rnatilishi kerak.
           </p>
 
+          <!-- ── Telegram bot ──────────────────────────────────────── -->
+          <div class="tbot">
+            <div class="tbot__hdr">
+              <div class="tbot__ico"><AppIcon name="send" :size="17"/></div>
+              <div>
+                <p class="tbot__title">Telegram bot</p>
+                <p class="tbot__sub">
+                  Hisobotlarni Telegram'dan ko'ring: kunlik savdo, foyda,
+                  qarzdorlar va kam qolgan tovarlar.
+                </p>
+              </div>
+            </div>
+
+            <!-- Ulanish kodi -->
+            <div v-if="botCode" class="tbot__code">
+              <div class="tbot__code-num">{{ botCode }}</div>
+              <div class="tbot__code-info">
+                <div class="tbot__code-lbl">Shu kodni botga yuboring</div>
+                <div class="tbot__code-time">Amal qilish muddati: {{ botQoldiMatn }}</div>
+              </div>
+            </div>
+
+            <div class="tbot__steps" v-if="!botCode">
+              <span class="tbot__step">1. Telegramda <b>@sellz_pos_bot</b> ni oching</span>
+              <span class="tbot__step">2. Quyidagi tugmani bosib kod oling</span>
+              <span class="tbot__step">3. Kodni botga yuboring</span>
+            </div>
+
+            <button class="tbot__btn" :disabled="botBusy" @click="kodOl">
+              <AppIcon name="plus" :size="14"/>
+              {{ botCode ? 'Yangi kod olish' : 'Ulanish kodini olish' }}
+            </button>
+
+            <!-- Bog'langan chatlar -->
+            <div v-if="botLinks.length" class="tbot__links">
+              <div class="tbot__links-t">Ulangan Telegram chatlar</div>
+              <div v-for="l in botLinks" :key="l.id" class="tbot__link">
+                <div>
+                  <div class="tbot__link-name">{{ l.chat_name || ('Chat ' + l.chat_id) }}</div>
+                  <div class="tbot__link-meta">
+                    {{ l.daily ? 'Kunlik xabar yoqilgan' : 'Kunlik xabar o\'chirilgan' }}
+                  </div>
+                </div>
+                <button class="tbot__unlink" @click="botUzish(l)">Uzish</button>
+              </div>
+            </div>
+          </div>
+
           <!-- Info cards -->
           <div class="info-cards">
             <div class="info-card">
@@ -414,6 +520,32 @@ select.inp { cursor:pointer; }
   background:#fef2f2; border:1px solid #fecaca; border-radius:9px;
 }
 .backup__err code { padding:1px 5px; background:#fee2e2; border-radius:4px; }
+
+/* ── Telegram bot ─────────────────────────────────────────────────── */
+.tbot { margin-top:24px; padding:16px 18px; background:linear-gradient(135deg,#eff6ff,#f8fafc); border:1px solid #bfdbfe; border-radius:12px; }
+.tbot__hdr { display:flex; align-items:flex-start; gap:13px; margin-bottom:12px; }
+.tbot__ico { display:flex; align-items:center; justify-content:center; width:38px; height:38px; flex-shrink:0; color:#fff; background:linear-gradient(135deg,#3b82f6,#2563eb); border-radius:9px; }
+.tbot__title { font-size:14px; font-weight:700; color:#0f172a; margin:0 0 3px; }
+.tbot__sub { font-size:12.5px; color:#475569; line-height:1.5; margin:0; max-width:560px; }
+
+.tbot__code { display:flex; align-items:center; gap:14px; padding:12px 16px; margin-bottom:12px; background:#fff; border:2px dashed #3b82f6; border-radius:10px; }
+.tbot__code-num { font-size:30px; font-weight:900; letter-spacing:.14em; color:#1d4ed8; font-variant-numeric:tabular-nums; }
+.tbot__code-lbl { font-size:12.5px; font-weight:600; color:#334155; }
+.tbot__code-time { font-size:11.5px; color:#64748b; margin-top:2px; font-variant-numeric:tabular-nums; }
+
+.tbot__steps { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+.tbot__step { font-size:12.5px; color:#475569; }
+
+.tbot__btn { display:flex; align-items:center; gap:6px; padding:9px 16px; font-size:13px; font-weight:600; color:#fff; background:linear-gradient(135deg,#3b82f6,#2563eb); border:none; border-radius:8px; cursor:pointer; font-family:inherit; }
+.tbot__btn:hover:not(:disabled) { filter:brightness(1.06); }
+.tbot__btn:disabled { opacity:.6; cursor:not-allowed; }
+
+.tbot__links { margin-top:14px; padding-top:12px; border-top:1px solid #bfdbfe; }
+.tbot__links-t { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#64748b; margin-bottom:8px; }
+.tbot__link { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 12px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px; }
+.tbot__link-name { font-size:13px; font-weight:600; color:#0f172a; }
+.tbot__link-meta { font-size:11px; color:#94a3b8; margin-top:1px; }
+.tbot__unlink { padding:5px 12px; font-size:12px; font-weight:600; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:7px; cursor:pointer; font-family:inherit; }
 
 .info-cards { display:flex; flex-direction:column; gap:10px; margin-top:24px; }
 .info-card { display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--color-border); border-radius:var(--r-xl); background:var(--color-surface); }

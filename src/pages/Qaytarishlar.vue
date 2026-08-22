@@ -126,11 +126,23 @@ function izlangan(item) {
   return String(item.productName || '').toLowerCase().includes(q.toLowerCase())
 }
 
-// Qidiruv natijasida BITTA hujjat topilsa — uni darhol ochamiz.
-// Kassir tovar yorlig'ini skanerlaydi va hujjat o'zi ochiladi.
+// Skanerlangandan keyin hujjatni DARHOL ochamiz — kassir qo'shimcha
+// bosish qilmasin.
+//
+// Server aniq mos kelgan hujjatlarni oldinga chiqaradi (`exact_ids`),
+// shuning uchun ro'yxatda bir nechta bo'lsa ham birinchisi kerakligi.
+// Ilgari "faqat bitta natija bo'lsa" sharti bor edi va shu mahsulot
+// boshqa sotuvlarda ham uchrasa oyna ochilmay qolardi.
 async function avtoOch() {
-  if (!search.value.trim() || sales.value.length !== 1) return
-  qidirilgan.value = search.value.trim()
+  const q = search.value.trim()
+  if (!q || !sales.value.length) return
+
+  // Faqat shtrix-kodga o'xshash qidiruvda avtomatik ochamiz.
+  // Mijoz ismi yozilganda kassir ro'yxatdan o'zi tanlashi kerak.
+  const kodga_oxshash = /^\d{6,}$/.test(q)
+  if (!kodga_oxshash && sales.value.length !== 1) return
+
+  qidirilgan.value = q
   await openDetail(sales.value[0])
 }
 

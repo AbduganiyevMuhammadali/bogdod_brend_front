@@ -2,6 +2,7 @@
 // beep('add')     — savatga qo'shish / skan muvaffaqiyatli (qisqa yuqori "bip")
 // beep('success') — sotuv yakunlandi (ikkitalik ko'tariluvchi signal)
 // beep('error')   — xato / topilmadi (past ogohlantirish)
+// beep('welcome') — tizimga kirish (yumshoq salomlashuv ohangi)
 
 let ctx = null
 
@@ -65,6 +66,13 @@ export function beep(kind = 'add') {
       // Bazada umuman yo'q tovar — pastga tushuvchi, aniq salbiy
       tone(400, 0,    0.11, 0.19, 'square')
       tone(260, 0.12, 0.20, 0.19, 'square')
+    } else if (kind === 'welcome') {
+      // Tizimga kirish — yumshoq, do'stona uch notali ko'tariluvchi
+      // ohang (C–E–G akkordi). Kassa signallaridan farq qilishi kerak:
+      // bu xato ham, skanerlash ham emas, shunchaki salomlashuv.
+      tone(523,  0,    0.10, 0.11)   // C5
+      tone(659,  0.10, 0.10, 0.11)   // E5
+      tone(784,  0.20, 0.30, 0.12)   // G5
     } else if (kind === 'finish') {
       // Sanoq yakunlandi — uch notali ko'tariluvchi akkord
       tone(784,  0,    0.11, 0.14)   // G5
