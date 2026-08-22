@@ -114,6 +114,16 @@ const botQoldiMatn = computed(() => {
   return `${m}:${String(s).padStart(2, '0')}`
 })
 
+// Oxirgi faollik — "2 soat oldin" ko'rinishida
+function botOxirgi(t) {
+  if (!t) return ''
+  const d = Math.floor((Date.now() - new Date(t)) / 60000)
+  if (d < 2)    return 'hozir faol'
+  if (d < 60)   return `${d} daqiqa oldin`
+  if (d < 1440) return `${Math.floor(d / 60)} soat oldin`
+  return `${Math.floor(d / 1440)} kun oldin`
+}
+
 async function botUzish(link) {
   if (!confirm(`"${link.chat_name || link.chat_id}" bog'lanishi uzilsinmi?`)) return
   try {
@@ -400,12 +410,24 @@ const activeSection = ref('store')
 
             <!-- Bog'langan chatlar -->
             <div v-if="botLinks.length" class="tbot__links">
-              <div class="tbot__links-t">Ulangan Telegram chatlar</div>
+              <div class="tbot__links-t">Ulangan Telegram akkauntlar</div>
               <div v-for="l in botLinks" :key="l.id" class="tbot__link">
-                <div>
-                  <div class="tbot__link-name">{{ l.chat_name || ('Chat ' + l.chat_id) }}</div>
+                <div class="tbot__link-av">
+                  {{ (l.chat_name || 'T')[0].toUpperCase() }}
+                </div>
+                <div class="tbot__link-body">
+                  <div class="tbot__link-name">
+                    {{ l.chat_name || ('Chat ' + l.chat_id) }}
+                    <span v-if="l.chat_username" class="tbot__link-user">@{{ l.chat_username }}</span>
+                  </div>
                   <div class="tbot__link-meta">
-                    {{ l.daily ? 'Kunlik xabar yoqilgan' : 'Kunlik xabar o\'chirilgan' }}
+                    <span :class="l.daily ? 'is-on' : 'is-off'">
+                      {{ l.daily
+                        ? `Kunlik xabar ${String(l.daily_hour ?? 21).padStart(2,'0')}:00`
+                        : 'Kunlik xabar o\'chirilgan' }}
+                    </span>
+                    <span v-if="l.created_by_name">· {{ l.created_by_name }} ulagan</span>
+                    <span v-if="l.last_seen">· {{ botOxirgi(l.last_seen) }}</span>
                   </div>
                 </div>
                 <button class="tbot__unlink" @click="botUzish(l)">Uzish</button>
@@ -426,7 +448,7 @@ const activeSection = ref('store')
               <div class="info-card__ico info-card__ico--indigo"><AppIcon name="monitor" :size="16"/></div>
               <div>
                 <p class="info-card__title">Versiya</p>
-                <p class="info-card__sub">BDM POS v1.0.0 — Barcha huquqlar himoyalangan</p>
+                <p class="info-card__sub">Sellz POS v1.0.0 — Barcha huquqlar himoyalangan</p>
               </div>
             </div>
           </div>
@@ -542,9 +564,14 @@ select.inp { cursor:pointer; }
 
 .tbot__links { margin-top:14px; padding-top:12px; border-top:1px solid #bfdbfe; }
 .tbot__links-t { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#64748b; margin-bottom:8px; }
-.tbot__link { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 12px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px; }
+.tbot__link { display:flex; align-items:center; gap:11px; padding:10px 12px; background:#fff; border:1px solid #e2e8f0; border-radius:9px; margin-bottom:6px; }
+.tbot__link-av { display:flex; align-items:center; justify-content:center; width:34px; height:34px; flex-shrink:0; font-size:14px; font-weight:800; color:#1d4ed8; background:#dbeafe; border-radius:9px; }
+.tbot__link-body { flex:1; min-width:0; }
+.tbot__link-user { margin-left:6px; font-size:11.5px; font-weight:600; color:#2563eb; }
 .tbot__link-name { font-size:13px; font-weight:600; color:#0f172a; }
-.tbot__link-meta { font-size:11px; color:#94a3b8; margin-top:1px; }
+.tbot__link-meta { display:flex; flex-wrap:wrap; gap:5px; font-size:11px; color:#94a3b8; margin-top:2px; }
+.tbot__link-meta .is-on  { color:#047857; font-weight:600; }
+.tbot__link-meta .is-off { color:#b45309; font-weight:600; }
 .tbot__unlink { padding:5px 12px; font-size:12px; font-weight:600; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:7px; cursor:pointer; font-family:inherit; }
 
 .info-cards { display:flex; flex-direction:column; gap:10px; margin-top:24px; }
