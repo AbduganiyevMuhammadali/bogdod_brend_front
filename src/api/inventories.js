@@ -32,6 +32,8 @@ function toFrontend(d) {
     createdAt:  d.createdAt,
     items:      (d.items || []).map(itemToFrontend),
     itemCount:  d.items?.length ?? 0,
+    // Yakunlash javobida: sanoq davomida sotilgan dona soni
+    sanoq_davomida_sotildi: Number(d.sanoq_davomida_sotildi) || 0,
   }
 }
 

@@ -311,9 +311,19 @@ async function finishDoc() {
 
   busy.value = true
   try {
-    doc.value = await inventoriesApi.finish(doc.value.id)
+    const natija = await inventoriesApi.finish(doc.value.id)
+    doc.value = natija
     beep('finish')
-    showToast('Inventarizatsiya yakunlandi, qoldiqlar yangilandi', 'ok')
+    // Sanoq davomida do'kon ishlashda davom etgan bo'lishi mumkin.
+    // O'sha savdolar qoldiqdan avtomatik ayirildi — kassir buni bilsin,
+    // aks holda "nega sanaganimdan kam?" degan savol tug'iladi.
+    const sotildi = Number(natija?.sanoq_davomida_sotildi) || 0
+    showToast(
+      sotildi > 0
+        ? `Yakunlandi. Sanoq davomida sotilgan ${sotildi} dona qoldiqdan ayirildi`
+        : 'Inventarizatsiya yakunlandi, qoldiqlar yangilandi',
+      'ok'
+    )
   } catch (e) {
     // Server sanoq tugallanmaganini aniqlab, yakunlamay to'xtatdi (409).
     // Bu oxirgi himoya — brauzerdagi ogohlantirish chetlab o'tilgan
