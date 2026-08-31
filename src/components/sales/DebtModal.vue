@@ -99,15 +99,69 @@ const yangiBoladi = computed(() =>
   !tanlangan.value && ism.value.trim().length >= 2
 )
 
+// ── Oldindan to'lov (aralash to'lov) ────────────────────────────────
+//
+// Mijoz savdoning bir qismini darhol to'lab, qolganini qarzga olishi
+// mumkin. Masalan 155,000 lik savdodan 100,000 ni beradi, 55,000
+// qarz bo'lib qoladi.
+//
+// 0 qoldirilsa — butun summa qarzga ketadi (odatiy holat).
+const oldindan  = ref(0)
+const prepayTur = ref('Naqd')
+
+// Kiritilgan pul savdodan oshib ketmasin
+function oldindanBelgila(v) {
+  const raqam = Number(String(v).replace(/\D/g, '')) || 0
+  oldindan.value = Math.max(0, Math.min(props.debtSum, raqam))
+}
+
+// Qarzga qoladigan qism
+const qolganQarz = computed(() => Math.max(0, props.debtSum - oldindan.value))
+
+// Tez tanlash: yarmi, uchdan biri va butun summa.
+// Kassir ko'p uchraydigan holatlarni bir bosishda kiritadi.
+const tezSummalar = computed(() => {
+  const j = props.debtSum
+  if (j <= 0) return []
+  const yumalat = v => Math.round(v / 1000) * 1000
+  const roy = [
+    { nom: '50%', qiy: yumalat(j / 2) },
+    { nom: '30%', qiy: yumalat(j * 0.3) },
+    { nom: "To'liq", qiy: j },
+  ]
+  // Bir xil yoki nolga teng variantlarni tashlaymiz
+  const korilgan = new Set()
+  return roy.filter(r => {
+    if (r.qiy <= 0 || korilgan.has(r.qiy)) return false
+    korilgan.add(r.qiy); return true
+  })
+})
+
+// To'liq to'lansa bu qarz emas — kassirni ogohlantiramiz
+const toliqTolandi = computed(() => oldindan.value > 0 && qolganQarz.value <= 0)
+
+const PREPAY_TURLAR = ['Naqd', 'Karta', "O'tkazma"]
+
 // ── Tasdiqlash ──────────────────────────────────────────────────────
 const tayyor = computed(() => !!tanlangan.value || ism.value.trim().length >= 2)
+
+// Ota-komponentga uzatiladigan ma'lumot
+function qaytar(client) {
+  return {
+    client,
+    // To'liq to'langan bo'lsa muddat keraksiz
+    dueDate:    qolganQarz.value > 0 ? (dueDate.value || null) : null,
+    prepaid:    oldindan.value,
+    prepayType: prepayTur.value,
+  }
+}
 
 async function tasdiqla() {
   xato.value = ''
 
   // Mavjud mijoz tanlangan — to'g'ridan-to'g'ri davom etamiz
   if (tanlangan.value) {
-    emit('confirm', { client: tanlangan.value, dueDate: dueDate.value || null })
+    emit('confirm', qaytar(tanlangan.value))
     return
   }
 
@@ -121,7 +175,7 @@ async function tasdiqla() {
       name: nom,
       phone: telefon.value.trim() || null,
     })
-    emit('confirm', { client: c, dueDate: dueDate.value || null })
+    emit('confirm', qaytar(c))
   } catch (e) {
     xato.value = e?.response?.data?.message || 'Mijozni saqlab bo\'lmadi'
   } finally { saqlanmoqda.value = false }
@@ -147,8 +201,14 @@ onMounted(async () => {
         <div class="dm__hdr-l">
           <div class="dm__hdr-ico"><AppIcon name="clock" :size="17" :stroke-width="2.2"/></div>
           <div>
-            <div class="dm__hdr-t">Qarzga sotish</div>
-            <div class="dm__hdr-s">{{ fmt(debtSum) }} so'm</div>
+            <div class="dm__hdr-t">{{ oldindan > 0 ? 'Aralash to\'lov' : 'Qarzga sotish' }}</div>
+            <div class="dm__hdr-s">
+              <template v-if="oldindan > 0">
+                {{ fmt(oldindan) }} to'landi
+                <span v-if="qolganQarz > 0"> · {{ fmt(qolganQarz) }} qarz</span>
+              </template>
+              <template v-else>{{ fmt(debtSum) }} so'm</template>
+            </div>
           </div>
         </div>
         <button class="dm__x" @click="emit('close')"><AppIcon name="x" :size="17"/></button>
@@ -220,9 +280,72 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- ── 2. Muddat ─────────────────────────────────────────── -->
+        <!-- ── 2. Oldindan to'lov ────────────────────────────────── -->
         <div class="dm__sec">
-          <div class="dm__lbl"><span class="dm__num">2</span> Qachon qaytaradi?</div>
+          <div class="dm__lbl">
+            <span class="dm__num">2</span> Hozir qancha to'laydi?
+            <span class="dm__lbl-opt">ixtiyoriy</span>
+          </div>
+
+          <div class="dm-pre">
+            <div class="dm-field dm-field--sum">
+              <AppIcon name="dollar-sign" :size="14" class="dm-field__ico"/>
+              <input
+                class="dm-field__inp dm-field__inp--sum"
+                inputmode="numeric"
+                :value="oldindan ? fmt(oldindan) : ''"
+                placeholder="0"
+                @input="oldindanBelgila($event.target.value)"
+              />
+              <span class="dm-field__unit">so'm</span>
+              <button v-if="oldindan" class="dm-field__x" @click="oldindan = 0" title="Tozalash">
+                <AppIcon name="x" :size="13"/>
+              </button>
+            </div>
+
+            <div class="dm-quick dm-quick--sum">
+              <button
+                v-for="t in tezSummalar" :key="t.nom"
+                class="dm-quick__b" :class="{ on: oldindan === t.qiy }"
+                @click="oldindan = oldindan === t.qiy ? 0 : t.qiy"
+              >{{ t.nom }} · {{ fmt(t.qiy) }}</button>
+            </div>
+
+            <!-- Qanday olindi: naqd / karta / o'tkazma.
+                 Kassa hisoboti to'g'ri bo'lishi uchun kerak. -->
+            <div v-if="oldindan > 0" class="dm-ptypes">
+              <button
+                v-for="t in PREPAY_TURLAR" :key="t"
+                class="dm-ptype" :class="{ on: prepayTur === t }"
+                @click="prepayTur = t"
+              >{{ t }}</button>
+            </div>
+
+            <!-- Hisob: qancha to'landi, qancha qarz qoldi -->
+            <div v-if="oldindan > 0" class="dm-split">
+              <div class="dm-split__row">
+                <span>To'landi</span>
+                <strong class="dm-split__paid">{{ fmt(oldindan) }} so'm</strong>
+              </div>
+              <div class="dm-split__row">
+                <span>Qarzga qoladi</span>
+                <strong class="dm-split__debt">{{ fmt(qolganQarz) }} so'm</strong>
+              </div>
+            </div>
+
+            <div v-if="toliqTolandi" class="dm-hint dm-hint--ok">
+              <AppIcon name="check-circle" :size="13"/>
+              To'liq to'landi — qarz qolmaydi
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 3. Muddat ─────────────────────────────────────────── -->
+        <div v-if="!toliqTolandi" class="dm__sec">
+          <div class="dm__lbl">
+            <span class="dm__num">3</span>
+            {{ oldindan > 0 ? "Qolganini qachon qaytaradi?" : 'Qachon qaytaradi?' }}
+          </div>
 
           <div class="dm-quick">
             <button
@@ -396,4 +519,45 @@ onMounted(async () => {
   .dm-overlay { padding: 0; align-items: flex-end; }
   .dm { max-width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; }
 }
+
+/* ── Oldindan to'lov (aralash to'lov) ────────────────────────────── */
+.dm__lbl-opt {
+  margin-left: 6px; padding: 1px 6px; border-radius: 5px;
+  background: #f1f5f9; color: #94a3b8;
+  font-size: 9.5px; font-weight: 600; text-transform: none; letter-spacing: 0;
+}
+.dm-field--sum .dm-field__inp--sum {
+  padding-right: 62px;
+  font-size: 16px; font-weight: 700; color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.dm-field__unit {
+  position: absolute; right: 34px;
+  font-size: 11px; font-weight: 600; color: #94a3b8; pointer-events: none;
+}
+.dm-quick--sum { margin-top: 8px; }
+.dm-quick--sum .dm-quick__b { font-variant-numeric: tabular-nums; }
+
+.dm-ptypes { display: flex; gap: 6px; margin-bottom: 9px; }
+.dm-ptype {
+  flex: 1; height: 30px; border: 1px solid #e2e8f0; border-radius: 7px;
+  background: #fff; color: #64748b;
+  font-size: 11.5px; font-weight: 600; font-family: inherit; cursor: pointer;
+  transition: all .12s;
+}
+.dm-ptype:hover { background: #f8fafc; }
+.dm-ptype.on { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+
+.dm-split {
+  padding: 9px 11px; margin-bottom: 9px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+}
+.dm-split__row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px; color: #64748b;
+}
+.dm-split__row + .dm-split__row { margin-top: 5px; }
+.dm-split__row strong { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.dm-split__paid { color: #16a34a; }
+.dm-split__debt { color: #e11d48; }
 </style>

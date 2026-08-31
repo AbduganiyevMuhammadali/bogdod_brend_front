@@ -31,6 +31,11 @@ const props = defineProps({
   totalSum:       { type: Number, default: 0 },
   payableSum:     { type: Number, default: 0 },
   debtSum:        { type: Number, default: 0 },
+  // Aralash to'lovda hozir to'lanadigan pul. Qarzsiz sotuvda
+  // `payableSum` ga teng bo'ladi.
+  paidSum:        { type: Number, default: 0 },
+  // Qarz muddati — DebtModal da tanlangan bo'lsa shu yerda ko'rinadi
+  dueDate:        { type: String, default: '' },
   discount:       { type: Number, default: 0 },
   paymentType:    { type: String, default: 'Naqd' },
   docNumber:      { type: Number, default: 1 },
@@ -64,10 +69,13 @@ function kunQosh(n) {
 
 // Standart: bir hafta. Kassir odatda shu muddatni beradi, kerak bo'lsa
 // bir bosishda o'zgartiradi.
-const dueDate = ref(kunQosh(7))
+// Qarz oynasida (DebtModal) sana allaqachon tanlangan bo'lishi mumkin —
+// uni bosib ketmaymiz. `immediate: true` bilan emit qilinsa, bu yerdagi
+// standart qiymat kassir tanlagan sanani almashtirib yuborardi.
+const dueDate = ref(props.dueDate || kunQosh(7))
 
-// Tanlangan sana ota-komponentga uzatiladi (u sotuvga qo'shadi)
-watch(dueDate, v => emit('update:dueDate', v || null), { immediate: true })
+// Faqat kassir shu oynada o'zgartirsa uzatamiz
+watch(dueDate, v => emit('update:dueDate', v || null))
 
 const dueLabel = computed(() => {
   if (!dueDate.value) return ''
@@ -87,6 +95,9 @@ const CARD_COLORS = [
   '#f3e8ff','#ccfbf1','#fef9c3','#ffe4e6','#e0f2fe',
 ]
 function cardColor(idx) { return CARD_COLORS[idx % CARD_COLORS.length] }
+
+// Aralash to'lov: bir qismi to'langan, bir qismi qarz
+const aralash = computed(() => props.debtSum > 0 && props.paidSum > 0)
 
 const itemsCount = computed(() => props.cart.reduce((s, i) => s + i.qty, 0))
 
@@ -324,6 +335,18 @@ function printReceipt() {
             <button class="pm-cli-x" @click="emit('drop-client')"><AppIcon name="x" :size="11"/></button>
           </div>
 
+          <!-- Aralash to'lov taqsimoti: qancha hozir, qancha qarz -->
+          <div v-if="aralash" class="pm-split">
+            <div class="pm-split__row">
+              <span><AppIcon name="dollar-sign" :size="12"/> Hozir to'lanadi</span>
+              <strong class="pm-split__paid">{{ fmt(paidSum) }} so'm</strong>
+            </div>
+            <div class="pm-split__row">
+              <span><AppIcon name="clock" :size="12"/> Qarzga qoladi</span>
+              <strong class="pm-split__debt">{{ fmt(debtSum) }} so'm</strong>
+            </div>
+          </div>
+
           <div v-if="debtSum > 0" class="pm-debt-warn">
             <AppIcon name="alert-triangle" :size="13"/>
             Qarzga: <strong>{{ fmt(debtSum) }} so'm</strong> · {{ selectedClient?.name }}
@@ -417,7 +440,13 @@ function printReceipt() {
 
                 <div class="rp-row">
                   <span>To'lov turi</span>
-                  <span class="rp-pay-badge">{{ paymentType }}</span>
+                  <span class="rp-pay-badge">{{ aralash ? 'Qisman qarz' : paymentType }}</span>
+                </div>
+                <!-- Aralash to'lovda mijoz nechta pul berganini
+                     chekda ko'rishi kerak — nizolarning oldini oladi -->
+                <div v-if="aralash" class="rp-row">
+                  <span>To'landi</span>
+                  <span class="rp-val">{{ fmt(paidSum) }} so'm</span>
                 </div>
                 <div v-if="debtSum > 0" class="rp-row rp-row--debt">
                   <span>Qarz miqdori</span>
@@ -597,4 +626,13 @@ function printReceipt() {
 .rp-qr__img{width:96px;height:96px;display:block;margin:0 auto 4px}
 .rp-qr__cap{font-size:13px;font-weight:800;color:#111827}
 .rp-qr__sub{font-size:12px;font-weight:700;color:#374151}
+
+/* Aralash to'lov taqsimoti */
+.pm-split{margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+.pm-split__row{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:rgba(255,255,255,.7)}
+.pm-split__row+.pm-split__row{margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)}
+.pm-split__row span{display:flex;align-items:center;gap:5px}
+.pm-split__row strong{font-size:14px;font-variant-numeric:tabular-nums}
+.pm-split__paid{color:#4ade80}
+.pm-split__debt{color:#fb7185}
 </style>

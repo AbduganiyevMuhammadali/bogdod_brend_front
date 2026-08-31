@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { firstAllowedPath } from '@/router/index.js'
 import AppIcon        from '@/components/AppIcon.vue'
 import SalePayModal   from '@/components/sales/SalePayModal.vue'
 import DebtModal      from '@/components/sales/DebtModal.vue'
@@ -18,6 +19,20 @@ import { fmtDate, fmtTime, fmtDateTime, todayKey } from '@/composables/useDateTi
 
 const route  = useRoute()
 const router = useRouter()
+
+// Sotuv oynasidan chiqish.
+//
+// Ilgari qat'iy `/dashboard` ga yuborardi, lekin Operator kabi cheklangan
+// rollarda Bosh sahifa ochiq emas — router uni to'xtatib "Bu bo'limga
+// kirish huquqingiz yo'q" xatosini chiqarardi. Endi foydalanuvchiga
+// ochiq birinchi sahifaga o'tamiz.
+function sotuvdanChiq() {
+  const yol = firstAllowedPath()
+  // Hech qanday bo'lim ochilmagan bo'lsa (kamdan-kam holat) — sotuvda
+  // qolamiz, aks holda foydalanuvchi bo'sh ekranga tushib qolardi
+  if (yol && yol !== '/sales') router.push(yol)
+  else if (!yol) flashErr("Sizga boshqa bo'lim ochilmagan")
+}
 
 
 // ── Currency settings (from localStorage) ────────────────────────
@@ -250,7 +265,21 @@ function setPrice(item, v) {
 // ── Totals ────────────────────────────────────────────────────────
 const totalSum   = computed(() => cart.value.reduce((s,i) => s+(Number(i.totalSum)||0), 0))
 const payableSum = computed(() => Math.max(0, totalSum.value - (Number(discount.value)||0)))
-const debtSum    = computed(() => paymentType.value === 'Qarz' ? payableSum.value : 0)
+// ARALASH TO'LOV: mijoz savdoning bir qismini hozir to'lab, qolganini
+// qarzga olishi mumkin. `oldindanTolov` — hozir to'langan pul.
+const oldindanTolov = ref(0)
+const oldindanTuri  = ref('Naqd')
+
+const debtSum = computed(() => {
+  if (paymentType.value !== 'Qarz') return 0
+  return Math.max(0, payableSum.value - (Number(oldindanTolov.value) || 0))
+})
+
+// Hozir kassaga tushadigan pul
+const naqdSum = computed(() =>
+  paymentType.value === 'Qarz'
+    ? Math.min(payableSum.value, Number(oldindanTolov.value) || 0)
+    : payableSum.value)
 // Qarz qaytarish muddati — DebtModal da tanlanadi
 const dueDate    = ref(null)
 
@@ -275,15 +304,28 @@ function tolovTuriTanla(pt) {
     return
   }
   // Boshqa turga o'tilsa qarz ma'lumotlari keraksiz bo'ladi
-  if (paymentType.value === 'Qarz') dueDate.value = null
+  if (paymentType.value === 'Qarz') { dueDate.value = null; oldindanTolov.value = 0 }
   paymentType.value = pt
 }
 
-function qarzTasdiqla({ client, dueDate: sana }) {
+function qarzTasdiqla({ client, dueDate: sana, prepaid = 0, prepayType = 'Naqd' }) {
   selectedClient.value = client
   clientQ.value        = client?.name || ''
   dueDate.value        = sana
-  paymentType.value    = 'Qarz'
+  const oldin = Math.max(0, Math.min(payableSum.value, Number(prepaid) || 0))
+  oldindanTolov.value  = oldin
+  oldindanTuri.value   = prepayType
+
+  // Mijoz hammasini to'lab qo'ysa bu qarz emas — oddiy sotuv.
+  // Turini "Qarz" qoldirsak hisobotlarda qarzsiz "Qarz" savdo
+  // ko'rinib chalkashtirardi.
+  if (oldin >= payableSum.value && payableSum.value > 0) {
+    paymentType.value   = prepayType
+    oldindanTolov.value = 0
+    dueDate.value       = null
+  } else {
+    paymentType.value = 'Qarz'
+  }
   showQarzSotuv.value  = false
 }
 
@@ -295,6 +337,7 @@ function qarzBekor() {
   if (paymentType.value === 'Qarz' && !selectedClient.value) {
     paymentType.value = 'Naqd'
     dueDate.value = null
+    oldindanTolov.value = 0
   }
 }
 const itemsCount = computed(() => cart.value.reduce((s,i) => s+i.qty, 0))
@@ -344,6 +387,11 @@ async function completeSale() {
       payment_type:  paymentType.value,
       price_type:    priceType.value,
       discount:      discount.value,
+      // Aralash to'lov: qarzga sotilganda hozir to'langan pul.
+      // Backend qolganini qarz deb yozadi.
+      paid_sum:      paymentType.value === 'Qarz' ? naqdSum.value : undefined,
+      prepay_type:   paymentType.value === 'Qarz' && naqdSum.value > 0
+                       ? oldindanTuri.value : undefined,
       // Qarz qaytarish muddati — to'lov oynasida tanlanadi.
       // Faqat qarzli sotuvda ma'noga ega (backend ham shuni tekshiradi).
       due_date:      debtSum.value > 0 ? (dueDate.value || null) : null,
@@ -363,6 +411,7 @@ async function completeSale() {
 
     cart.value=[]; activeIdx.value=-1; discount.value=0; discountPct.value=0
     selectedClient.value=null; paymentType.value='Naqd'; showPayModal.value=false
+    oldindanTolov.value=0; oldindanTuri.value='Naqd'; dueDate.value=null
     try {
       const nextNum = await salesApi.getNextDocNumber()
       // fetch the just-completed sale for quick-view
@@ -1199,7 +1248,9 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
           <kbd>F12</kbd>
         </button>
         <div v-if="debtSum>0" class="cart__debt-note">
-          <AppIcon name="clock" :size="11"/> Qarz: {{ fmt(debtSum) }} so'm
+          <AppIcon name="clock" :size="11"/>
+          <span v-if="oldindanTolov>0" class="cart__prepaid">{{ fmt(naqdSum) }} to'landi ·</span>
+          Qarz: {{ fmt(debtSum) }} so'm
           <span v-if="showUSD"> ≈ {{ toUSD(debtSum) }} $</span>
           · {{ selectedClient?.name }}
         </div>
@@ -1711,6 +1762,8 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
     :total-sum="totalSum"
     :payable-sum="payableSum"
     :debt-sum="debtSum"
+    :paid-sum="naqdSum"
+    :due-date="dueDate || ''"
     :discount="discount"
     :payment-type="paymentType"
     :doc-number="docNumber"
@@ -2144,7 +2197,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
       <span class="smt__ico-wrap"><AppIcon name="users" :size="19" :stroke-width="mode==='clients'?2.3:1.9"/></span>
       <span class="smt__lbl">Mijoz</span>
     </button>
-    <button class="smt__item" @click="router.push('/dashboard')">
+    <button class="smt__item" @click="sotuvdanChiq">
       <span class="smt__ico-wrap"><AppIcon name="x" :size="19" :stroke-width="2"/></span>
       <span class="smt__lbl">Chiqish</span>
     </button>
@@ -2432,6 +2485,7 @@ const TXN_LABELS={sale:"Sotuv",income:"Kirim",expense:"Chiqim",debt_payment:"Qar
 .pay-sum{font-size:21px;font-weight:900;letter-spacing:-.03em}
 .cart__pay-btn kbd{font-size:10px;background:rgba(255,255,255,.2);border-radius:4px;padding:1px 6px;font-family:inherit}
 .cart__debt-note{display:flex;align-items:center;gap:5px;margin-top:7px;font-size:11.5px;color:#ef4444;font-weight:600;text-align:center;justify-content:center}
+.cart__prepaid{color:#4ade80;font-weight:700}
 
 /* ══════════════════════════════════════════════════════════════════
    MOBILE (≤768px) — full-screen catalog + bottom cart bar/sheet

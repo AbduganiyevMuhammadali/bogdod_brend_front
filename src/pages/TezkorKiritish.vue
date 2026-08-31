@@ -223,7 +223,19 @@ async function save() {
     }))
 
     const res = await productsApi.bulkCreate(payload, { supplierId: supplierId.value })
-    savedCount.value += res.yaratildi || 0
+    // Jami — yangi yaratilganlar + mavjud tovarga qo'shilganlar
+    savedCount.value += res.jami ?? res.yaratildi ?? 0
+
+    // Mavjud tovarga qo'shilgan bo'lsa, buni aytamiz: kassir yangi
+    // yozuv yaratilmaganini bilib tursin (ro'yxat shishmasligi uchun
+    // ataylab shunday qilingan)
+    if (res.qoshildi > 0) {
+      showToast(
+        `${res.qoshildi} ta tovar mavjud yozuvga qo'shildi` +
+        (res.yaratildi ? `, ${res.yaratildi} ta yangi yaratildi` : ''),
+        'ok', 5000
+      )
+    }
     // Qaysi hujjatga tegishli ekanini eslab qolamiz — chop etilgach
     // "chop etilgan" deb belgilash uchun (bir necha saqlash yig'ilishi mumkin)
     if (res.kirim_hujjati) pendingDocIds.value.push(res.kirim_hujjati)

@@ -97,11 +97,90 @@ const qidirilgan = ref('')
 async function openDetail(sale) {
   detailLoad.value = true
   showDetail.value = true
+  qaytarish.value  = {}
+  qaytXato.value   = ''
   try {
     const res = await salesApi.getById(sale.id)
     detail.value = res
+    // Shtrix-kod skanerlab kelingan bo'lsa — o'sha tovar darhol
+    // belgilanadi, kassir faqat "Qaytarish" ni bosadi
+    if (qidirilgan.value && res.status === 'completed') {
+      for (const i of res.items) {
+        if (izlangan(i) && qolgan(i) > 0) belgila(i, qolgan(i))
+      }
+    }
   } catch { detail.value = null }
   finally { detailLoad.value = false }
+}
+
+// ── Qisman qaytarish ───────────────────────────────────────────────
+//
+// Mijoz ko'pincha chekdagi HAMMA tovarni emas, bittasini qaytaradi.
+// Shuning uchun har bir satrga qaytariladigan miqdor tanlanadi va
+// faqat o'sha qismi omborga qaytadi.
+const qaytarish  = ref({})     // sale_item.id -> qaytariladigan miqdor
+const yuborilyapti = ref(false)
+const qaytXato   = ref('')
+
+// Shu satrda yana qancha qaytarish mumkin
+function qolgan(item) {
+  return Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || 0))
+}
+
+function belgila(item, qty) {
+  const max = qolgan(item)
+  const q = Math.max(0, Math.min(max, Number(qty) || 0))
+  qaytarish.value = { ...qaytarish.value, [item.id]: q }
+}
+
+function ozgart(item, delta) { belgila(item, (qaytarish.value[item.id] || 0) + delta) }
+
+// Satrni belgilash/olib tashlash — bosgan zahoti to'liq miqdor tanlanadi
+function almashtir(item) {
+  const bor = qaytarish.value[item.id] || 0
+  belgila(item, bor > 0 ? 0 : qolgan(item))
+}
+
+// Chegirma nisbati — backend bilan bir xil hisob
+const chegirmaKoef = computed(() => {
+  const jami = Number(detail.value?.totalSum) || 0
+  const ch   = Number(detail.value?.discount) || 0
+  return jami > 0 ? Math.max(0, 1 - ch / jami) : 1
+})
+
+// Tanlangan tovarlar uchun qaytariladigan pul (chegirmadan keyin)
+const qaytSumma = computed(() => {
+  if (!detail.value) return 0
+  return detail.value.items.reduce((s, i) => {
+    const q = qaytarish.value[i.id] || 0
+    return s + (Number(i.price) || 0) * q * chegirmaKoef.value
+  }, 0)
+})
+
+const qaytDona = computed(() =>
+  Object.values(qaytarish.value).reduce((a, b) => a + (Number(b) || 0), 0))
+
+// Butun hujjat qaytarilyaptimi — shunda sotuv "Bekor" bo'ladi
+const toliqQaytish = computed(() => {
+  if (!detail.value) return false
+  return detail.value.items.every(i => (qaytarish.value[i.id] || 0) >= qolgan(i))
+})
+
+async function qaytarishniBajar() {
+  if (!detail.value || qaytDona.value <= 0) return
+  yuborilyapti.value = true
+  qaytXato.value = ''
+  try {
+    const items = detail.value.items
+      .filter(i => (qaytarish.value[i.id] || 0) > 0)
+      .map(i => ({ sale_item_id: i.id, qty: qaytarish.value[i.id] }))
+    await salesApi.returnItems(detail.value.id, items)
+    showDetail.value = false
+    qaytarish.value = {}
+    await load()
+  } catch (e) {
+    qaytXato.value = e?.response?.data?.message || 'Qaytarishda xatolik'
+  } finally { yuborilyapti.value = false }
 }
 
 // Shtrix-kod shakllari (skaner boshidagi nolni tushirishi mumkin)
@@ -266,7 +345,7 @@ const TABS = [
                   class="row-act row-act--cancel"
                   title="Qaytarish"
                   :disabled="cancelling === s.id"
-                  @click.stop="openCancel(s)"
+                  @click.stop="openDetail(s)"
                 >
                   <AppIcon v-if="cancelling === s.id" name="loader" :size="13" class="spin"/>
                   <AppIcon v-else name="rotate-ccw" :size="13"/>
@@ -305,40 +384,88 @@ const TABS = [
                 <div class="dm-item"><span>To'langan</span><strong>{{ fmt(detail.paidSum) }} so'm</strong></div>
                 <div v-if="detail.debtSum" class="dm-item"><span>Qarz</span><strong class="clr-red">{{ fmt(detail.debtSum) }} so'm</strong></div>
               </div>
-              <table class="dtable" style="margin-top:12px">
+              <p v-if="detail.status === 'completed'" class="ret-hint">
+                <AppIcon name="rotate-ccw" :size="12"/>
+                Qaytariladigan tovarlarni belgilang va miqdorini tanlang
+              </p>
+
+              <table class="dtable ret-table" style="margin-top:8px">
                 <thead>
                   <tr>
+                    <th v-if="detail.status === 'completed'" style="width:34px"></th>
                     <th>Mahsulot</th>
-                    <th class="ta-r">Miqdor</th>
+                    <th class="ta-r">Sotilgan</th>
+                    <th v-if="detail.status === 'completed'" class="ta-c" style="width:130px">Qaytariladi</th>
                     <th class="ta-r">Narx</th>
                     <th class="ta-r">Jami</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="item in detail.items" :key="item.id"
-                      class="dtable__row" :class="{ 'row-found': izlangan(item) }">
+                      class="dtable__row"
+                      :class="{ 'row-found': izlangan(item), 'row-picked': (qaytarish[item.id] || 0) > 0 }">
+                    <td v-if="detail.status === 'completed'" class="ta-c">
+                      <input
+                        type="checkbox"
+                        class="ret-cb"
+                        :disabled="qolgan(item) <= 0"
+                        :checked="(qaytarish[item.id] || 0) > 0"
+                        @change="almashtir(item)"
+                      />
+                    </td>
                     <td>
                       <span v-if="izlangan(item)" class="found-tag">Qidirilgan</span>
                       {{ item.productName }}
                       <div v-if="item.barcode" class="item-bc">{{ item.barcode }}</div>
+                      <div v-if="item.returnedQty > 0" class="item-ret">
+                        {{ item.returnedQty }} dona qaytarilgan
+                      </div>
                     </td>
                     <td class="ta-r">{{ item.qty }}</td>
+                    <td v-if="detail.status === 'completed'" class="ta-c">
+                      <div v-if="qolgan(item) > 0" class="qty-pick">
+                        <button class="qp__btn" :disabled="(qaytarish[item.id] || 0) <= 0"
+                                @click="ozgart(item, -1)">−</button>
+                        <input
+                          class="qp__inp"
+                          :value="qaytarish[item.id] || 0"
+                          @input="belgila(item, $event.target.value)"
+                        />
+                        <button class="qp__btn" :disabled="(qaytarish[item.id] || 0) >= qolgan(item)"
+                                @click="ozgart(item, 1)">+</button>
+                      </div>
+                      <span v-else class="qp__done">To'liq qaytarilgan</span>
+                    </td>
                     <td class="ta-r">{{ fmt(item.price) }}</td>
                     <td class="ta-r">{{ fmt(item.totalSum) }}</td>
                   </tr>
                 </tbody>
               </table>
+
+              <p v-if="qaytXato" class="ret-err">
+                <AppIcon name="alert-triangle" :size="13"/> {{ qaytXato }}
+              </p>
             </template>
           </div>
-          <div class="modal__footer">
-            <button class="mf__btn mf__btn--cancel" @click="showDetail=false">Yopish</button>
-            <button
-              v-if="detail?.status === 'completed'"
-              class="mf__btn mf__btn--return"
-              @click="showDetail=false; openCancel(detail)"
-            >
-              <AppIcon name="rotate-ccw" :size="14"/> Qaytarish
-            </button>
+          <div class="modal__footer ret-footer">
+            <div v-if="detail?.status === 'completed' && qaytDona > 0" class="ret-sum">
+              <span class="ret-sum__lbl">{{ qaytDona }} dona qaytariladi</span>
+              <strong class="ret-sum__val">{{ fmt(qaytSumma) }} so'm</strong>
+              <span v-if="detail.discount > 0" class="ret-sum__note">chegirma hisobga olindi</span>
+            </div>
+            <div class="ret-actions">
+              <button class="mf__btn mf__btn--cancel" @click="showDetail=false">Yopish</button>
+              <button
+                v-if="detail?.status === 'completed'"
+                class="mf__btn mf__btn--return"
+                :disabled="qaytDona <= 0 || yuborilyapti"
+                @click="qaytarishniBajar"
+              >
+                <AppIcon v-if="yuborilyapti" name="loader" :size="14" class="spin"/>
+                <AppIcon v-else name="rotate-ccw" :size="14"/>
+                {{ toliqQaytish && qaytDona > 0 ? "To'liq qaytarish" : 'Qaytarish' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -480,4 +607,60 @@ const TABS = [
 
 @keyframes spin { to{transform:rotate(360deg)} }
 .spin { animation:spin .8s linear infinite; }
+
+/* ── Qisman qaytarish ────────────────────────────────────────────── */
+.ret-hint {
+  display: flex; align-items: center; gap: 6px;
+  margin: 12px 0 0; padding: 7px 10px;
+  font-size: 11.5px; color: #9f1239;
+  background: #fff1f2; border: 1px solid #fecdd3; border-radius: 7px;
+}
+.ret-table th { white-space: nowrap; }
+.ret-cb { width: 15px; height: 15px; accent-color: #e11d48; cursor: pointer; }
+.ret-cb:disabled { cursor: not-allowed; opacity: .4; }
+
+.dtable__row.row-picked { background: #fff5f6; }
+.dtable__row.row-picked:hover { background: #ffe9ec; }
+
+.qty-pick {
+  display: inline-flex; align-items: center;
+  border: 1px solid #e2e8f0; border-radius: 7px; overflow: hidden;
+  background: #fff;
+}
+.qp__btn {
+  width: 26px; height: 26px; border: 0; background: #f8fafc;
+  color: #475569; font-size: 15px; line-height: 1; cursor: pointer;
+}
+.qp__btn:hover:not(:disabled) { background: #fee2e2; color: #e11d48; }
+.qp__btn:disabled { opacity: .35; cursor: not-allowed; }
+.qp__inp {
+  width: 44px; height: 26px; border: 0; text-align: center;
+  font-size: 12.5px; font-weight: 600; color: #0f172a;
+  font-variant-numeric: tabular-nums; outline: none;
+  border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;
+}
+.qp__done { font-size: 11px; color: #94a3b8; }
+
+.item-ret { margin-top: 2px; font-size: 10.5px; color: #e11d48; font-weight: 600; }
+
+.ret-err {
+  display: flex; align-items: center; gap: 6px;
+  margin: 10px 0 0; padding: 8px 10px;
+  font-size: 12px; color: #b91c1c;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 7px;
+}
+
+.ret-footer { justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ret-sum { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ret-sum__lbl  { font-size: 11.5px; color: #64748b; }
+.ret-sum__val  { font-size: 16px; font-weight: 700; color: #e11d48; font-variant-numeric: tabular-nums; }
+.ret-sum__note { font-size: 10.5px; color: #94a3b8; }
+.ret-actions { display: flex; gap: 8px; margin-left: auto; }
+.mf__btn:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 640px) {
+  .ret-footer { flex-direction: column; align-items: stretch; }
+  .ret-actions { margin-left: 0; }
+  .ret-actions .mf__btn { flex: 1; justify-content: center; }
+}
 </style>

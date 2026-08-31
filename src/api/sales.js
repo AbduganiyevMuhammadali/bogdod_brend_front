@@ -12,6 +12,8 @@ function itemToFront(i) {
     totalSum:     Number(i.total_sum)  || 0,
     totalUSD:     Number(i.total_usd)  || 0,
     priceType:    i.price_type   ?? 'chakana',
+    // Shu satrdan qancha qaytarilgan — qisman qaytarishda ishlatiladi
+    returnedQty:  Number(i.returned_qty) || 0,
   }
 }
 
@@ -32,6 +34,7 @@ function toFront(s) {
     paidSum:      Number(s.paid_sum)     || 0,
     paidUSD:      Number(s.paid_usd)     || 0,
     debtSum:      Number(s.debt_sum)     || 0,
+    returnedSum:  Number(s.returned_sum) || 0,
     debtUSD:      Number(s.debt_usd)     || 0,
     exchangeRate: Number(s.exchange_rate)|| 0,
     status:       s.status        ?? 'completed',
@@ -63,6 +66,11 @@ export const salesApi = {
   async cancel(id) {
     const res = await http.post(`/sales/${id}/cancel`)
     return toFront(res.data)
+  },
+  // Qisman qaytarish: items = [{ sale_item_id, qty }]
+  async returnItems(id, items, comment) {
+    const res = await http.post(`/sales/${id}/return-items`, { items, comment })
+    return res.data
   },
   async payDebt(data) {
     const res = await http.post('/sales/pay-debt', data)
