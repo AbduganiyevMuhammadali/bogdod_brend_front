@@ -295,6 +295,75 @@ async function rollbackDoc() {
   }
 }
 
+// ── Ombor tahlili ───────────────────────────────────────────────────
+//
+// "Nega 555 ta tovar topilmadi?" — buning sabablari bir nechta va
+// ular aralashib ketadi. Shu oyna ularni ajratib ko'rsatadi.
+const tahlil     = ref(null)
+const tahlilYuk  = ref(false)
+const showTahlil = ref(false)
+const tahlilTab  = ref('sabablar')   // 'sabablar' | 'kodsiz' | 'dublikat'
+
+async function tahlilOch() {
+  if (!doc.value) return
+  tahlilYuk.value = true
+  try {
+    tahlil.value = await inventoriesApi.tahlil(doc.value.id)
+    tahlilTab.value = 'sabablar'
+    showTahlil.value = true
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'Tahlil yuklanmadi', 'err')
+  } finally { tahlilYuk.value = false }
+}
+
+// ── Omborni tuzatish ────────────────────────────────────────────────
+//
+// Manfiy qoldiq va partiya nomuvofiqligini bir bosishda tuzatadi.
+// Tuzatishdan oldin serverda zaxira nusxa olinadi.
+const tuzatYuk = ref(false)
+
+async function omborniTuzat() {
+  const t = tahlil.value
+  if (!t) return
+
+  const manfiy    = Number(t.ombor.manfiy)    || 0
+  const nomuvofiq = Number(t.ombor.nomuvofiq) || 0
+
+  const qatorlar = []
+  if (manfiy)    qatorlar.push(`  • ${son(manfiy)} ta manfiy qoldiq → 0 ga ko'tariladi`)
+  if (nomuvofiq) qatorlar.push(`  • ${son(nomuvofiq)} ta partiya nomuvofiqligi → tenglashtiriladi`)
+
+  if (!confirm(
+    `OMBORNI TUZATISH\n\n${qatorlar.join('\n')}\n\n` +
+    `Tuzatishdan oldin zaxira nusxa olinadi.\n\nDavom etilsinmi?`
+  )) return
+
+  tuzatYuk.value = true
+  try {
+    const r = await inventoriesApi.omborTuzat({
+      manfiy:  manfiy > 0,
+      partiya: nomuvofiq > 0,
+    })
+    showToast(
+      `Tuzatildi: ${son(r.manfiy_tuzatildi)} manfiy, ${son(r.partiya_tuzatildi)} partiya`,
+      'ok'
+    )
+    // Tahlilni yangilaymiz — raqamlar darhol o'zgarsin
+    tahlil.value = await inventoriesApi.tahlil(doc.value.id)
+    tahlilTab.value = 'sabablar'
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'Tuzatishda xatolik', 'err')
+  } finally { tuzatYuk.value = false }
+}
+
+// Sabab ulushi — foizda
+function ulush(n) {
+  const jami = Number(tahlil.value?.sanoq?.topilmadi) || 0
+  return jami > 0 ? Math.round((Number(n) || 0) / jami * 100) : 0
+}
+
+const son = v => new Intl.NumberFormat('uz-UZ').format(Number(v) || 0)
+
 async function finishDoc() {
   const nf = notFound.value.length, ex = extra.value.length
 
@@ -444,6 +513,12 @@ async function deleteDoc(id) {
             </p>
           </div>
         </div>
+        <!-- Ombor tahlili — "nega tovar topilmadi?" savoliga javob -->
+        <button class="inv__btn inv__btn--analiz" :disabled="tahlilYuk" @click="tahlilOch"
+                title="Topilmagan tovarlar sababini ko'rsatadi">
+          <AppIcon :name="tahlilYuk ? 'loader' : 'bar-chart-2'" :size="15"
+                   :class="tahlilYuk && 'spin'" /> Ombor tahlili
+        </button>
         <!-- Ortiqcha satrlar noto'g'ri chiqqan bo'lsa qayta tekshirish -->
         <button v-if="doc.status === 'draft' && extra.length > 0 && canEdit('products')"
                 class="inv__btn inv__btn--fix" :disabled="busy" @click="repairDoc"
@@ -619,6 +694,286 @@ async function deleteDoc(id) {
       </div>
     </template>
   </div>
+
+  <!-- ══ OMBOR TAHLILI ══════════════════════════════════════════════ -->
+  <Teleport to="body">
+    <div v-if="showTahlil && tahlil" class="th-ov" @click.self="showTahlil = false">
+      <div class="th">
+
+        <div class="th__hdr">
+          <div>
+            <div class="th__t">Ombor tahlili</div>
+            <div class="th__s">Inventarizatsiya #{{ tahlil.hujjat.doc_number }}</div>
+          </div>
+          <button class="th__x" @click="showTahlil = false"><AppIcon name="x" :size="17"/></button>
+        </div>
+
+        <!-- ── OMBORDA NIMA BOR ────────────────────────────────────
+             "Necha xil, necha dona" — do'kon egasi uchun asosiy raqam -->
+        <div class="th__ombor">
+          <div class="th-cell th-cell--main">
+            <div class="th-cell__v">{{ son(tahlil.ombor.qoldigi_bor) }}</div>
+            <div class="th-cell__l">XIL tovar</div>
+            <div class="th-cell__n">omborda mavjud</div>
+          </div>
+          <div class="th-cell th-cell--main">
+            <div class="th-cell__v">{{ son(tahlil.ombor.jami_dona) }}</div>
+            <div class="th-cell__l">DONA tovar</div>
+            <div class="th-cell__n">jami fizik miqdor</div>
+          </div>
+          <div class="th-cell">
+            <div class="th-cell__v">{{ son(tahlil.ombor.bitta_dona) }}</div>
+            <div class="th-cell__l">1 donadan</div>
+            <div class="th-cell__n">yagona nusxa</div>
+          </div>
+          <div class="th-cell">
+            <div class="th-cell__v">{{ son(tahlil.ombor.kop_dona) }}</div>
+            <div class="th-cell__l">2+ donadan</div>
+            <div class="th-cell__n">{{ son(tahlil.ombor.kop_dona_soni) }} dona · eng ko'pi {{ son(tahlil.ombor.eng_kop) }}</div>
+          </div>
+        </div>
+
+        <!-- Sanoqqa kirmaydiganlar — 2185 raqami qayerdan kelgani -->
+        <div class="th__chetda">
+          <span class="th__chetda-t">Sanoqqa kirmaydi:</span>
+          <span class="th__chetda-i">
+            qoldig'i 0 — <b>{{ son(tahlil.ombor.qoldigi_nol) }}</b>
+          </span>
+          <span class="th__chetda-i">
+            nofaol — <b>{{ son(tahlil.ombor.nofaol) }}</b>
+          </span>
+          <span class="th__chetda-i">
+            papka — <b>{{ son(tahlil.ombor.papka) }}</b>
+          </span>
+        </div>
+
+        <!-- ── OMBOR MUAMMOLARI ──────────────────────────────────── -->
+        <div v-if="tahlil.ombor.manfiy > 0 || tahlil.ombor.nomuvofiq > 0" class="th__muomo">
+          <div class="th__muomo-l">
+            <div v-if="tahlil.ombor.manfiy > 0" class="th__muomo-r">
+              <AppIcon name="alert-triangle" :size="14"/>
+              <span>
+                <b>{{ son(tahlil.ombor.manfiy) }} ta tovarning qoldig'i MANFIY</b> —
+                omborda yo'q tovar sotilgan. Bu FIFO tannarx hisobini buzadi.
+              </span>
+            </div>
+            <div v-if="tahlil.ombor.nomuvofiq > 0" class="th__muomo-r th__muomo-r--sariq">
+              <AppIcon name="alert-circle" :size="14"/>
+              <span>
+                <b>{{ son(tahlil.ombor.nomuvofiq) }} ta tovarda partiya nomuvofiqligi</b> —
+                qoldiq va FIFO partiyalari yig'indisi farq qiladi, foyda noto'g'ri chiqadi.
+              </span>
+            </div>
+          </div>
+          <button v-if="canEdit('products')" class="th__tuzat"
+                  :disabled="tuzatYuk" @click="omborniTuzat">
+            <AppIcon :name="tuzatYuk ? 'loader' : 'refresh-cw'" :size="14" :class="tuzatYuk && 'spin'"/>
+            Tuzatish
+          </button>
+        </div>
+
+        <div class="th__tabs">
+          <button class="th__tab" :class="{ on: tahlilTab === 'sabablar' }"
+                  @click="tahlilTab = 'sabablar'">Sabablar</button>
+          <button class="th__tab" :class="{ on: tahlilTab === 'kodsiz' }"
+                  @click="tahlilTab = 'kodsiz'">
+            Shtrix-kodsiz <span class="th__tab-n">{{ son(tahlil.sabablar.kodsiz.n) }}</span>
+          </button>
+          <button class="th__tab" :class="{ on: tahlilTab === 'dublikat' }"
+                  @click="tahlilTab = 'dublikat'">
+            Dublikat kod <span class="th__tab-n">{{ son(tahlil.dublikat_royxat.length) }}</span>
+          </button>
+          <button v-if="tahlil.manfiy_royxat.length" class="th__tab"
+                  :class="{ on: tahlilTab === 'manfiy' }" @click="tahlilTab = 'manfiy'">
+            Manfiy qoldiq <span class="th__tab-n th__tab-n--red">{{ son(tahlil.manfiy_royxat.length) }}</span>
+          </button>
+          <button v-if="tahlil.nomuvofiq_royxat.length" class="th__tab"
+                  :class="{ on: tahlilTab === 'nomuvofiq' }" @click="tahlilTab = 'nomuvofiq'">
+            Partiya farqi <span class="th__tab-n">{{ son(tahlil.nomuvofiq_royxat.length) }}</span>
+          </button>
+        </div>
+
+        <div class="th__body">
+
+          <!-- ── SABABLAR ──────────────────────────────────────────── -->
+          <template v-if="tahlilTab === 'sabablar'">
+            <div class="th-sum">
+              <span>Sanoqda topilmagan</span>
+              <strong>{{ son(tahlil.sanoq.topilmadi) }} xil · {{ son(tahlil.sanoq.topilmadi_dona) }} dona</strong>
+            </div>
+
+            <!-- Har sabab alohida qator: ulushi bilan -->
+            <div class="th-bar">
+              <div class="th-bar__hdr">
+                <span class="th-bar__nom">
+                  <i class="th-dot th-dot--red"></i> Shtrix-kodi yo'q
+                </span>
+                <span class="th-bar__v">{{ son(tahlil.sabablar.kodsiz.n) }} · {{ ulush(tahlil.sabablar.kodsiz.n) }}%</span>
+              </div>
+              <div class="th-bar__track">
+                <div class="th-bar__fill th-bar__fill--red"
+                     :style="{ width: ulush(tahlil.sabablar.kodsiz.n) + '%' }"></div>
+              </div>
+              <div class="th-bar__izoh">
+                Bu tovarlarni <b>skanerlab bo'lmaydi</b> — kodi yo'q. Har sanoqda
+                "topilmadi" bo'lib qolaveradi. Ularga shtrix-kod bering.
+              </div>
+            </div>
+
+            <div class="th-bar">
+              <div class="th-bar__hdr">
+                <span class="th-bar__nom">
+                  <i class="th-dot th-dot--orange"></i> Dublikat shtrix-kodli
+                </span>
+                <span class="th-bar__v">{{ son(tahlil.sabablar.dublikat.n) }} · {{ ulush(tahlil.sabablar.dublikat.n) }}%</span>
+              </div>
+              <div class="th-bar__track">
+                <div class="th-bar__fill th-bar__fill--orange"
+                     :style="{ width: ulush(tahlil.sabablar.dublikat.n) + '%' }"></div>
+              </div>
+              <div class="th-bar__izoh">
+                Bir xil kod bir necha tovarda. Skaner <b>doim birinchisini</b> topadi,
+                qolganlari hech qachon sanalmaydi.
+              </div>
+            </div>
+
+            <div class="th-bar">
+              <div class="th-bar__hdr">
+                <span class="th-bar__nom">
+                  <i class="th-dot th-dot--green"></i> Sanoq davomida sotilgan
+                </span>
+                <span class="th-bar__v">{{ son(tahlil.sabablar.sotilgan.n) }} · {{ ulush(tahlil.sabablar.sotilgan.n) }}%</span>
+              </div>
+              <div class="th-bar__track">
+                <div class="th-bar__fill th-bar__fill--green"
+                     :style="{ width: ulush(tahlil.sabablar.sotilgan.n) + '%' }"></div>
+              </div>
+              <div class="th-bar__izoh">
+                Javonda yo'q edi, chunki <b>sotib ketilgan</b> — bu normal holat.
+              </div>
+            </div>
+
+            <div class="th-bar">
+              <div class="th-bar__hdr">
+                <span class="th-bar__nom">
+                  <i class="th-dot th-dot--gray"></i> Skanerlanmagan
+                </span>
+                <span class="th-bar__v">{{ son(tahlil.sabablar.skanerlanmagan.n) }} · {{ ulush(tahlil.sabablar.skanerlanmagan.n) }}%</span>
+              </div>
+              <div class="th-bar__track">
+                <div class="th-bar__fill th-bar__fill--gray"
+                     :style="{ width: ulush(tahlil.sabablar.skanerlanmagan.n) + '%' }"></div>
+              </div>
+              <div class="th-bar__izoh">
+                Texnik sabab yo'q — bu tovarlar <b>shunchaki sanalmagan</b>.
+                Sanoq oxirigacha yetkazilmagan bo'lishi mumkin.
+              </div>
+            </div>
+          </template>
+
+          <!-- ── SHTRIX-KODSIZ RO'YXAT ─────────────────────────────── -->
+          <template v-else-if="tahlilTab === 'kodsiz'">
+            <div v-if="!tahlil.kodsiz_royxat.length" class="th-bosh">
+              Shtrix-kodsiz tovar yo'q — bu yaxshi.
+            </div>
+            <template v-else>
+              <div class="th-hint">
+                Bu tovarlarga shtrix-kod bering, aks holda ular har sanoqda
+                "topilmadi" bo'lib qolaveradi.
+              </div>
+              <table class="th-tbl">
+                <thead><tr><th>Tovar</th><th class="r">Qoldiq</th></tr></thead>
+                <tbody>
+                  <tr v-for="k in tahlil.kodsiz_royxat" :key="k.product_id">
+                    <td>{{ k.nomi }}</td>
+                    <td class="r">{{ son(k.qoldiq) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+          </template>
+
+          <!-- ── MANFIY QOLDIQ ─────────────────────────────────────── -->
+          <template v-else-if="tahlilTab === 'manfiy'">
+            <div class="th-hint th-hint--red">
+              Manfiy qoldiq real emas — "-3 dona" bo'lmaydi. Bu omborda yo'q
+              tovar sotilgani. Tuzatilsa 0 ga ko'tariladi, keyin haqiqiy
+              miqdorni kirim qiling yoki sanoqda belgilang.
+            </div>
+            <table class="th-tbl">
+              <thead><tr><th>Tovar</th><th class="r">Qoldiq</th></tr></thead>
+              <tbody>
+                <tr v-for="m in tahlil.manfiy_royxat" :key="m.id">
+                  <td>{{ m.nomi }}</td>
+                  <td class="r th-neg">{{ son(m.qoldiq) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+
+          <!-- ── PARTIYA NOMUVOFIQLIGI ─────────────────────────────── -->
+          <template v-else-if="tahlilTab === 'nomuvofiq'">
+            <div class="th-hint">
+              Tovar qoldig'i va FIFO partiyalari yig'indisi mos kelmayapti.
+              Shu holatda tannarx va foyda noto'g'ri hisoblanadi.
+              "Tuzatish" partiyalarni qoldiqqa tenglashtiradi.
+            </div>
+            <table class="th-tbl">
+              <thead>
+                <tr>
+                  <th>Tovar</th>
+                  <th class="r">Qoldiq</th>
+                  <th class="r">Partiyada</th>
+                  <th class="r">Farq</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="n in tahlil.nomuvofiq_royxat" :key="n.id">
+                  <td>{{ n.nomi }}</td>
+                  <td class="r">{{ son(n.qoldiq) }}</td>
+                  <td class="r">{{ son(n.partiya) }}</td>
+                  <td class="r" :class="Number(n.farq) < 0 ? 'th-neg' : 'th-pos'">
+                    {{ Number(n.farq) > 0 ? '+' : '' }}{{ son(n.farq) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+
+          <!-- ── DUBLIKAT KODLAR ───────────────────────────────────── -->
+          <template v-else>
+            <div v-if="!tahlil.dublikat_royxat.length" class="th-bosh">
+              Dublikat shtrix-kod yo'q — bu yaxshi.
+            </div>
+            <template v-else>
+              <div class="th-hint">
+                Bir xil kod bir necha tovarda. Skanerlaganda faqat birinchisi
+                topiladi — kodlarni ajrating.
+              </div>
+              <table class="th-tbl">
+                <thead><tr><th>Shtrix-kod</th><th class="c">Tovar</th><th>Nomlari</th></tr></thead>
+                <tbody>
+                  <tr v-for="(d, i) in tahlil.dublikat_royxat" :key="i">
+                    <td class="mono">{{ d.kod }}</td>
+                    <td class="c"><span class="th-badge">{{ d.soni }}</span></td>
+                    <td class="th-nomlar">{{ d.nomlar }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+          </template>
+        </div>
+
+        <div class="th__foot">
+          <div class="th__foot-txt">
+            Bu tahlil bazani <b>o'zgartirmaydi</b> — faqat o'qiydi.
+          </div>
+          <button class="th__ok" @click="showTahlil = false">Yopish</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
 </template>
 
 <style scoped>
@@ -984,4 +1339,137 @@ async function deleteDoc(id) {
   .scan__last { min-width: 0; max-width: none; }
   .inv__head { flex-direction: column; }
 }
+
+/* ══ OMBOR TAHLILI ══════════════════════════════════════════════════ */
+.th-ov{position:fixed;inset:0;z-index:9400;background:rgba(15,23,42,.55);
+  backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:22px}
+.th{width:100%;max-width:760px;max-height:88vh;display:flex;flex-direction:column;
+  background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 22px 60px rgba(15,23,42,.3)}
+
+.th__hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;border-bottom:1px solid #e2e8f0}
+.th__t{font-size:16px;font-weight:700;color:#0f172a}
+.th__s{font-size:12px;color:#64748b;margin-top:2px}
+.th__x{width:30px;height:30px;border:0;border-radius:8px;background:#f1f5f9;
+  color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.th__x:hover{background:#e2e8f0}
+
+/* Ombor holati */
+.th__ombor{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e2e8f0;
+  border-bottom:1px solid #e2e8f0}
+.th-cell{background:#fff;padding:12px 14px}
+.th-cell--dim{background:#f8fafc}
+.th-cell__v{font-size:19px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums}
+.th-cell--dim .th-cell__v{color:#94a3b8}
+.th-cell__l{font-size:11px;color:#64748b;margin-top:2px;line-height:1.3}
+.th-cell__n{font-size:9.5px;color:#94a3b8;margin-top:2px}
+
+.th__ogoh{display:flex;align-items:center;gap:7px;padding:9px 20px;
+  background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:600;
+  border-bottom:1px solid #fecaca}
+
+/* Tablar */
+.th__tabs{display:flex;gap:4px;padding:10px 20px 0;border-bottom:1px solid #e2e8f0}
+.th__tab{padding:8px 13px;border:0;background:none;color:#64748b;
+  font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px}
+.th__tab:hover{color:#334155}
+.th__tab.on{color:#4f46e5;border-bottom-color:#4f46e5}
+.th__tab-n{padding:1px 6px;border-radius:99px;background:#f1f5f9;
+  font-size:10.5px;font-variant-numeric:tabular-nums}
+.th__tab.on .th__tab-n{background:#eef2ff;color:#4f46e5}
+
+.th__body{flex:1;overflow-y:auto;padding:16px 20px}
+
+.th-sum{display:flex;justify-content:space-between;align-items:baseline;
+  padding:11px 14px;margin-bottom:14px;border-radius:10px;
+  background:#fff1f2;border:1px solid #fecdd3}
+.th-sum span{font-size:12px;color:#9f1239}
+.th-sum strong{font-size:14px;color:#e11d48;font-variant-numeric:tabular-nums}
+
+/* Sabab qatorlari */
+.th-bar{margin-bottom:15px}
+.th-bar__hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.th-bar__nom{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#334155}
+.th-bar__v{font-size:12px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums}
+.th-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.th-dot--red{background:#ef4444}
+.th-dot--orange{background:#f59e0b}
+.th-dot--green{background:#22c55e}
+.th-dot--gray{background:#94a3b8}
+.th-bar__track{height:7px;border-radius:99px;background:#f1f5f9;overflow:hidden}
+.th-bar__fill{height:100%;border-radius:99px;transition:width .3s}
+.th-bar__fill--red{background:#ef4444}
+.th-bar__fill--orange{background:#f59e0b}
+.th-bar__fill--green{background:#22c55e}
+.th-bar__fill--gray{background:#94a3b8}
+.th-bar__izoh{margin-top:6px;font-size:11.5px;color:#64748b;line-height:1.5}
+.th-bar__izoh b{color:#334155;font-weight:600}
+
+.th-hint{padding:9px 12px;margin-bottom:12px;border-radius:8px;
+  background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11.5px;line-height:1.5}
+.th-bosh{padding:36px 0;text-align:center;color:#94a3b8;font-size:13px}
+
+/* Jadval */
+.th-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.th-tbl th{position:sticky;top:0;background:#f8fafc;text-align:left;
+  padding:8px 10px;font-size:10.5px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.04em;color:#64748b;border-bottom:1px solid #e2e8f0}
+.th-tbl td{padding:8px 10px;border-bottom:1px solid #f1f5f9;color:#334155}
+.th-tbl .r{text-align:right;font-variant-numeric:tabular-nums}
+.th-tbl .c{text-align:center}
+.th-tbl .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+.th-nomlar{color:#64748b;font-size:11px;max-width:330px}
+.th-badge{display:inline-block;min-width:20px;padding:1px 6px;border-radius:99px;
+  background:#fef3c7;color:#92400e;font-size:10.5px;font-weight:700}
+
+.th__foot{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 20px;border-top:1px solid #e2e8f0;background:#f8fafc}
+.th__foot-txt{font-size:11px;color:#94a3b8}
+.th__foot-txt b{color:#64748b}
+.th__ok{height:34px;padding:0 18px;border:0;border-radius:8px;background:#4f46e5;
+  color:#fff;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.th__ok:hover{background:#4338ca}
+
+@keyframes th-spin{to{transform:rotate(360deg)}}
+.spin{animation:th-spin .8s linear infinite}
+.inv__btn--analiz{background:#f1f5f9;color:#475569}
+.inv__btn--analiz:hover:not(:disabled){background:#e2e8f0}
+
+@media (max-width:720px){
+  .th-ov{padding:0}
+  .th{max-width:100%;max-height:100vh;border-radius:0}
+  .th__ombor{grid-template-columns:repeat(2,1fr)}
+  .th-nomlar{max-width:150px}
+}
+
+/* Ombor holati — asosiy raqamlar */
+.th-cell--main{background:#f5f3ff}
+.th-cell--main .th-cell__v{color:#4f46e5;font-size:21px}
+.th-cell--main .th-cell__l{font-weight:600;color:#4338ca}
+
+.th__chetda{display:flex;flex-wrap:wrap;align-items:center;gap:14px;
+  padding:8px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:11px}
+.th__chetda-t{color:#94a3b8;font-weight:600}
+.th__chetda-i{color:#64748b}
+.th__chetda-i b{color:#334155;font-variant-numeric:tabular-nums}
+
+/* Ombor muammolari */
+.th__muomo{display:flex;align-items:center;gap:14px;padding:11px 20px;
+  background:#fff7ed;border-bottom:1px solid #fed7aa}
+.th__muomo-l{flex:1;display:flex;flex-direction:column;gap:7px}
+.th__muomo-r{display:flex;align-items:flex-start;gap:8px;font-size:11.5px;
+  color:#9a3412;line-height:1.5}
+.th__muomo-r b{font-weight:700}
+.th__muomo-r--sariq{color:#854d0e}
+.th__tuzat{flex-shrink:0;height:34px;padding:0 15px;border:0;border-radius:8px;
+  background:#ea580c;color:#fff;font-size:12.5px;font-weight:600;font-family:inherit;
+  cursor:pointer;display:flex;align-items:center;gap:7px}
+.th__tuzat:hover:not(:disabled){background:#c2410c}
+.th__tuzat:disabled{opacity:.5;cursor:not-allowed}
+
+.th__tab-n--red{background:#fee2e2;color:#b91c1c}
+.th-hint--red{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
+.th-neg{color:#dc2626;font-weight:700}
+.th-pos{color:#16a34a;font-weight:700}
 </style>

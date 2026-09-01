@@ -373,54 +373,94 @@ function pickClient(c) {
 function dropClient() { selectedClient.value=null; clientQ.value='' }
 
 // ── Complete sale ──────────────────────────────────────────────────
+// Sotuvni serverga yuborish. `manfiyRuxsat` — qoldiq yetmasa ham
+// sotishga ruxsat (kassir ataylab tasdiqlaganda).
+async function sotuvniYubor(manfiyRuxsat) {
+  const soldItems = cart.value.map(i => ({ ...i }))
+  await salesApi.complete({
+    doc_number:    docNumber.value,
+    date:          new Date().toISOString(),
+    warehouse:     warehouse.value,
+    client_id:     selectedClient.value?.id ?? null,
+    payment_type:  paymentType.value,
+    price_type:    priceType.value,
+    discount:      discount.value,
+    // Aralash to'lov: qarzga sotilganda hozir to'langan pul.
+    // Backend qolganini qarz deb yozadi.
+    paid_sum:      paymentType.value === 'Qarz' ? naqdSum.value : undefined,
+    prepay_type:   paymentType.value === 'Qarz' && naqdSum.value > 0
+                     ? oldindanTuri.value : undefined,
+    // Qarz qaytarish muddati — to'lov oynasida tanlanadi.
+    // Faqat qarzli sotuvda ma'noga ega (backend ham shuni tekshiradi).
+    due_date:      debtSum.value > 0 ? (dueDate.value || null) : null,
+    exchange_rate: exchangeRate.value,
+    // Kassir tasdiqlagan bo'lsa qoldiq yetmasa ham sotiladi
+    allow_negative: manfiyRuxsat || undefined,
+    items: soldItems.map(i=>({
+      product_id:i.productId, barcode:i.barcode, product_name:i.productName,
+      qty:i.qty, price:i.price, total_sum:i.totalSum, price_type:i.priceType,
+    })),
+  })
+  // Update stock in-place immediately (no flicker)
+  soldItems.forEach(item => {
+    const prod = products.value.find(p => p.id === item.productId)
+    if (prod) prod.qty = Math.max(0, Number(prod.qty) - Number(item.qty))
+  })
+  if (!showOutOfStock.value)
+    products.value = products.value.filter(p => Number(p.qty) > 0)
+
+  cart.value=[]; activeIdx.value=-1; discount.value=0; discountPct.value=0
+  selectedClient.value=null; paymentType.value='Naqd'; showPayModal.value=false
+  oldindanTolov.value=0; oldindanTuri.value='Naqd'; dueDate.value=null
+  try {
+    const nextNum = await salesApi.getNextDocNumber()
+    // fetch the just-completed sale for quick-view
+    const allSales = await salesApi.getAll({limit:1})
+    if(allSales.data.length) lastSale.value = allSales.data[0]
+    docNumber.value = nextNum
+  } catch {}
+  flashSuccess()
+}
+
 async function completeSale() {
   if (!cart.value.length) { flashErr("Savat bo'sh"); return }
   if (paymentType.value==='Qarz' && !selectedClient.value) { flashErr('Qarz uchun mijoz tanlang'); return }
   saving.value=true; saveErr.value=''
   try {
-    const soldItems = cart.value.map(i => ({ ...i }))
-    await salesApi.complete({
-      doc_number:    docNumber.value,
-      date:          new Date().toISOString(),
-      warehouse:     warehouse.value,
-      client_id:     selectedClient.value?.id ?? null,
-      payment_type:  paymentType.value,
-      price_type:    priceType.value,
-      discount:      discount.value,
-      // Aralash to'lov: qarzga sotilganda hozir to'langan pul.
-      // Backend qolganini qarz deb yozadi.
-      paid_sum:      paymentType.value === 'Qarz' ? naqdSum.value : undefined,
-      prepay_type:   paymentType.value === 'Qarz' && naqdSum.value > 0
-                       ? oldindanTuri.value : undefined,
-      // Qarz qaytarish muddati — to'lov oynasida tanlanadi.
-      // Faqat qarzli sotuvda ma'noga ega (backend ham shuni tekshiradi).
-      due_date:      debtSum.value > 0 ? (dueDate.value || null) : null,
-      exchange_rate: exchangeRate.value,
-      items: soldItems.map(i=>({
-        product_id:i.productId, barcode:i.barcode, product_name:i.productName,
-        qty:i.qty, price:i.price, total_sum:i.totalSum, price_type:i.priceType,
-      })),
-    })
-    // Update stock in-place immediately (no flicker)
-    soldItems.forEach(item => {
-      const prod = products.value.find(p => p.id === item.productId)
-      if (prod) prod.qty = Math.max(0, Number(prod.qty) - Number(item.qty))
-    })
-    if (!showOutOfStock.value)
-      products.value = products.value.filter(p => Number(p.qty) > 0)
+    await sotuvniYubor(false)
+  } catch(e) {
+    const d = e.response?.data
 
-    cart.value=[]; activeIdx.value=-1; discount.value=0; discountPct.value=0
-    selectedClient.value=null; paymentType.value='Naqd'; showPayModal.value=false
-    oldindanTolov.value=0; oldindanTuri.value='Naqd'; dueDate.value=null
-    try {
-      const nextNum = await salesApi.getNextDocNumber()
-      // fetch the just-completed sale for quick-view
-      const allSales = await salesApi.getAll({limit:1})
-      if(allSales.data.length) lastSale.value = allSales.data[0]
-      docNumber.value = nextNum
-    } catch {}
-    flashSuccess()
-  } catch(e) { flashErr(e.response?.data?.message ?? 'Sotuv amalga oshmadi'); saveErr.value = e.response?.data?.message ?? 'Xatolik' }
+    // Qoldiq yetmasa — kassirga aniq aytamiz va tanlov beramiz.
+    // Ba'zan tovar javonda bor, lekin bazaga kirim qilinmagan bo'ladi:
+    // shunda kassir sotishni davom ettira oladi, lekin qoldiq manfiyga
+    // tushishini bilib turadi.
+    if (e.response?.status === 409 && d?.code === 'QOLDIQ_YETMAYDI') {
+      const royxat = (d.tovarlar || [])
+        .map(t => `  • ${t.nomi}\n      omborda ${t.bor} ta, sotilmoqchi ${t.kerak} ta`)
+        .join('\n')
+      const javob = confirm(
+        `QOLDIQ YETARLI EMAS\n\n${royxat}\n\n` +
+        `Tovar javonda bor, lekin bazaga kirim qilinmagan bo'lishi mumkin.\n\n` +
+        `Baribir sotilsinmi? (qoldiq manfiyga tushadi — keyin kirim qiling)`
+      )
+      if (javob) {
+        try {
+          await sotuvniYubor(true)
+          return
+        } catch (e2) {
+          const m = e2.response?.data?.message ?? 'Sotuv amalga oshmadi'
+          flashErr(m); saveErr.value = m
+        }
+      } else {
+        saveErr.value = ''
+      }
+      return
+    }
+
+    flashErr(d?.message ?? 'Sotuv amalga oshmadi')
+    saveErr.value = d?.message ?? 'Xatolik'
+  }
   finally { saving.value=false }
 }
 

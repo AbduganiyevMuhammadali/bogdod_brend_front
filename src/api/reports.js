@@ -4,6 +4,8 @@ export const reportsApi = {
   async getOverview()                    { return (await http.get('/reports/overview')).data },
   async getTodaySales(params = {})       { return (await http.get('/reports/today', { params })).data },
   async getProductSales(params = {})     { return (await http.get('/reports/products', { params })).data },
+  // Ombor qoldig'i — qaysi tovar bor va nechtasi bor
+  async getOmbor(params = {})            { return (await http.get('/reports/ombor', { params })).data },
   async getClientReport(params = {})     { return (await http.get('/reports/clients', { params })).data },
   async getCashierReport(params = {})    { return (await http.get('/reports/cashiers', { params })).data },
   async getCashRegister(params = {})     { return (await http.get('/reports/cash-register', { params })).data },

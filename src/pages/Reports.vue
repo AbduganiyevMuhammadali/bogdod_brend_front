@@ -11,6 +11,7 @@ import { todayKey, fmtDateTime as fmtDate } from '@/composables/useDateTime.js'
 // ── Tabs ─────────────────────────────────────────────────────────
 const TABS = [
   { key: 'today',     label: 'Bugungi sotuvlar',   icon: 'sun'        },
+  { key: 'ombor',     label: 'Ombor qoldig\'i',    icon: 'archive'    },
   { key: 'products',  label: 'Tovar hisoboti',     icon: 'package'    },
   { key: 'clients',   label: 'Mijoz hisoboti',     icon: 'users'      },
   { key: 'cashiers',  label: 'Kassir hisoboti',    icon: 'user-check' },
@@ -63,6 +64,67 @@ const filteredProducts = computed(() => {
   const q = prodSearch.value.toLowerCase()
   return q ? products.value.filter(p => p.product_name.toLowerCase().includes(q)) : products.value
 })
+
+// ── Ombor qoldig'i ────────────────────────────────────────────────
+//
+// "Qaysi tovar bor va nechtasi bor" — sotuv emas, HOZIRGI qoldiq.
+// Tannarx, ombordagi pul qiymati va sotuv tezligi bilan.
+const ombor       = ref(null)
+const omborLoad   = ref(false)
+const omborSearch = ref('')
+const omborHolat  = ref('bor')      // bor | kam | tugagan | manfiy | all
+const omborKat    = ref('all')
+const omborSort   = ref('nom')      // nom | qoldiq | qiymat
+const omborPage   = ref(1)
+
+const OMBOR_HOLAT = [
+  { key: 'bor',     nom: 'Mavjud'      },
+  { key: 'kam',     nom: 'Kam qolgan'  },
+  { key: 'tugagan', nom: 'Tugagan'     },
+  { key: 'manfiy',  nom: 'Manfiy'      },
+  { key: 'all',     nom: 'Barchasi'    },
+]
+
+async function loadOmbor(qoshimcha = false) {
+  omborLoad.value = true
+  try {
+    const r = await reportsApi.getOmbor({
+      search:   omborSearch.value.trim() || undefined,
+      category: omborKat.value !== 'all' ? omborKat.value : undefined,
+      holat:    omborHolat.value,
+      sort:     omborSort.value,
+      page:     omborPage.value,
+      limit:    100,
+    })
+    // "Yana yuklash" da ro'yxatni davom ettiramiz
+    if (qoshimcha && ombor.value) {
+      ombor.value = { ...r, data: [...ombor.value.data, ...r.data] }
+    } else {
+      ombor.value = r
+    }
+  } catch { if (!qoshimcha) ombor.value = null }
+  finally { omborLoad.value = false }
+}
+
+let omborTimer = null
+watch(omborSearch, () => {
+  clearTimeout(omborTimer)
+  omborTimer = setTimeout(() => { omborPage.value = 1; loadOmbor() }, 300)
+})
+watch([omborHolat, omborKat, omborSort], () => { omborPage.value = 1; loadOmbor() })
+
+function omborYana() {
+  omborPage.value++
+  loadOmbor(true)
+}
+
+// Sotuv tezligi bo'yicha rang: tez sotiladigan yashil, turib qolgan qizil
+function tezlikRang(k) {
+  if (k === null || k === undefined) return 'tz--yoq'
+  if (k <= 14)  return 'tz--tez'
+  if (k <= 60)  return 'tz--orta'
+  return 'tz--sekin'
+}
 
 // ── Client report ─────────────────────────────────────────────────
 const clients    = ref([])
@@ -145,6 +207,7 @@ const filteredSuppliers = computed(() => {
 // ── Load tab data ─────────────────────────────────────────────────
 async function refreshTab() {
   if (tab.value === 'today')     loadToday()
+  if (tab.value === 'ombor')     loadOmbor()
   if (tab.value === 'products')  loadProducts()
   if (tab.value === 'clients')   loadClients()
   if (tab.value === 'cashiers')  loadCashiers()
@@ -384,6 +447,155 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
             <span class="ts-item__cur">ta</span>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ OMBOR QOLDIG'I ═══════════════════════════════════════════ -->
+  <div v-else-if="tab === 'ombor'" class="rep__panel">
+
+    <!-- Umumiy holat: omborda nima bor -->
+    <div v-if="ombor" class="om-stats">
+      <div class="om-stat om-stat--main">
+        <div class="om-stat__v">{{ fmt(ombor.umumiy.bor) }}</div>
+        <div class="om-stat__l">XIL tovar mavjud</div>
+      </div>
+      <div class="om-stat om-stat--main">
+        <div class="om-stat__v">{{ fmt(ombor.umumiy.dona) }}</div>
+        <div class="om-stat__l">DONA jami</div>
+      </div>
+      <div class="om-stat">
+        <div class="om-stat__v om-stat__v--money">{{ fmt(ombor.umumiy.tannarx_qiymati) }}</div>
+        <div class="om-stat__l">Ombor qiymati <span class="om-stat__n">tannarxda</span></div>
+      </div>
+      <div class="om-stat">
+        <div class="om-stat__v om-stat__v--green">{{ fmt(ombor.umumiy.sotuv_qiymati) }}</div>
+        <div class="om-stat__l">Sotilsa <span class="om-stat__n">sotuv narxida</span></div>
+      </div>
+      <div class="om-stat om-stat--warn" v-if="ombor.umumiy.kam > 0">
+        <div class="om-stat__v">{{ fmt(ombor.umumiy.kam) }}</div>
+        <div class="om-stat__l">Kam qolgan</div>
+      </div>
+      <div class="om-stat om-stat--dim">
+        <div class="om-stat__v">{{ fmt(ombor.umumiy.tugagan) }}</div>
+        <div class="om-stat__l">Tugagan</div>
+      </div>
+    </div>
+
+    <div class="panel__hdr om-hdr">
+      <span class="panel__title">Ombor qoldig'i</span>
+      <input v-model="omborSearch" class="panel__search" placeholder="Tovar nomi yoki shtrix-kod..."/>
+
+      <div class="om-filters">
+        <button v-for="h in OMBOR_HOLAT" :key="h.key"
+                class="om-chip" :class="{ on: omborHolat === h.key }"
+                @click="omborHolat = h.key">{{ h.nom }}</button>
+      </div>
+
+      <select v-if="ombor?.kategoriyalar?.length" v-model="omborKat" class="om-sel">
+        <option value="all">Barcha kategoriya</option>
+        <option v-for="k in ombor.kategoriyalar" :key="k.nomi" :value="k.nomi">
+          {{ k.nomi }} ({{ fmt(k.dona) }})
+        </option>
+      </select>
+
+      <select v-model="omborSort" class="om-sel">
+        <option value="nom">Nom bo'yicha</option>
+        <option value="qoldiq">Ko'p qolgani</option>
+        <option value="qiymat">Qimmatlari</option>
+      </select>
+
+      <button class="dr-btn" @click="omborPage = 1; loadOmbor()">
+        <AppIcon name="refresh-cw" :size="13"/>
+      </button>
+      <span class="panel__count">{{ fmt(ombor?.total || 0) }} ta</span>
+    </div>
+
+    <div v-if="omborLoad && !ombor" class="rep__loading">
+      <div v-for="i in 8" :key="i" class="skeleton sk-row"></div>
+    </div>
+    <div v-else-if="!ombor?.data?.length" class="rep__empty">
+      <AppIcon name="archive" :size="40" :stroke-width="1.2"/>
+      <p>Tovar topilmadi</p>
+    </div>
+
+    <div v-else class="tbl-wrap">
+      <table class="rep-tbl om-tbl">
+        <thead>
+          <tr>
+            <th>Tovar</th>
+            <th>Kategoriya</th>
+            <th class="ta-r">Qoldiq</th>
+            <th class="ta-r">Tannarx</th>
+            <th class="ta-r">Sotuv narxi</th>
+            <th class="ta-r">Ombor qiymati</th>
+            <th class="ta-r">30 kun sotuv</th>
+            <th class="ta-c">Yetadi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in ombor.data" :key="p.id" class="rep-row">
+            <td class="c-bold">
+              {{ p.nomi }}
+              <div v-if="p.barcode" class="om-bc">{{ p.barcode }}</div>
+            </td>
+            <td class="c-dim">{{ p.kategoriya || '—' }}</td>
+            <td class="ta-r">
+              <span class="om-qty" :class="{ 'om-qty--kam': p.kam, 'om-qty--neg': p.qoldiq < 0 }">
+                {{ fmt(p.qoldiq) }}
+              </span>
+              <span class="unit">{{ p.birlik }}</span>
+            </td>
+            <td class="ta-r c-dim">{{ p.tannarx ? fmt(p.tannarx) : '—' }}</td>
+            <td class="ta-r">{{ fmt(p.narx) }}</td>
+            <td class="ta-r c-bold" style="color:#6366f1">
+              <span class="num">{{ fmt(p.tannarx_qiymati) }}</span>
+            </td>
+            <td class="ta-r">
+              <span v-if="p.sotildi_30k > 0">{{ fmt(p.sotildi_30k) }}</span>
+              <span v-else class="c-dim">—</span>
+            </td>
+            <td class="ta-c">
+              <span class="tz" :class="tezlikRang(p.yetadi_kun)">
+                {{ p.yetadi_kun === null ? 'sotilmagan'
+                   : p.yetadi_kun > 365 ? '1 yil+'
+                   : p.yetadi_kun + ' kun' }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Mobil kartochkalar -->
+      <div class="rep-cards">
+        <div v-for="p in ombor.data" :key="'m-'+p.id" class="rep-card">
+          <div class="rep-card__top">
+            <span class="rep-card__name">{{ p.nomi }}</span>
+            <span class="om-qty" :class="{ 'om-qty--kam': p.kam, 'om-qty--neg': p.qoldiq < 0 }">
+              {{ fmt(p.qoldiq) }} {{ p.birlik }}
+            </span>
+          </div>
+          <div class="rep-card__rows">
+            <div class="rep-card__field"><span class="c-dim sm">Tannarx</span><span>{{ p.tannarx ? fmt(p.tannarx) : '—' }}</span></div>
+            <div class="rep-card__field"><span class="c-dim sm">Sotuv narxi</span><span>{{ fmt(p.narx) }}</span></div>
+            <div class="rep-card__field"><span class="c-dim sm">Ombor qiymati</span><span class="c-bold" style="color:#6366f1">{{ fmt(p.tannarx_qiymati) }}</span></div>
+            <div class="rep-card__field"><span class="c-dim sm">30 kun sotuv</span><span>{{ p.sotildi_30k > 0 ? fmt(p.sotildi_30k) : '—' }}</span></div>
+            <div class="rep-card__field">
+              <span class="c-dim sm">Yetadi</span>
+              <span class="tz" :class="tezlikRang(p.yetadi_kun)">
+                {{ p.yetadi_kun === null ? 'sotilmagan' : p.yetadi_kun > 365 ? '1 yil+' : p.yetadi_kun + ' kun' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sahifalash: 2000+ tovarda hammasini birdan yuklamaymiz -->
+      <div v-if="ombor.has_more" class="om-more">
+        <button class="om-more__btn" :disabled="omborLoad" @click="omborYana">
+          <AppIcon v-if="omborLoad" name="loader" :size="14" class="spin"/>
+          {{ omborLoad ? 'Yuklanmoqda...' : `Yana yuklash (${fmt(ombor.total - ombor.data.length)} ta qoldi)` }}
+        </button>
       </div>
     </div>
   </div>
@@ -1581,5 +1793,64 @@ const totalCashierRev = computed(() => cashiers.value.reduce((s, c) => s + c.tot
 @keyframes repPanelIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══ OMBOR QOLDIG'I ═══════════════════════════════════════════════ */
+.om-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;margin-bottom:14px}
+.om-stat{padding:12px 14px;border-radius:11px;background:#fff;
+  border:1px solid #e2e8f0}
+.om-stat--main{background:linear-gradient(135deg,#eef2ff,#f5f3ff);border-color:#c7d2fe}
+.om-stat--warn{background:#fffbeb;border-color:#fde68a}
+.om-stat--dim{background:#f8fafc}
+.om-stat__v{font-size:20px;font-weight:700;color:#0f172a;
+  font-variant-numeric:tabular-nums;line-height:1.15}
+.om-stat--main .om-stat__v{color:#4f46e5;font-size:23px}
+.om-stat--warn .om-stat__v{color:#b45309}
+.om-stat--dim .om-stat__v{color:#94a3b8}
+.om-stat__v--money{color:#6366f1;font-size:17px}
+.om-stat__v--green{color:#16a34a;font-size:17px}
+.om-stat__l{margin-top:3px;font-size:11px;color:#64748b;font-weight:600}
+.om-stat--main .om-stat__l{color:#4338ca}
+.om-stat__n{font-weight:400;color:#94a3b8}
+
+.om-hdr{flex-wrap:wrap;gap:8px}
+.om-filters{display:flex;gap:4px;flex-wrap:wrap}
+.om-chip{height:28px;padding:0 11px;border:1px solid #e2e8f0;border-radius:7px;
+  background:#fff;color:#64748b;font-size:11.5px;font-weight:600;
+  font-family:inherit;cursor:pointer;transition:all .12s}
+.om-chip:hover{background:#f8fafc}
+.om-chip.on{background:#4f46e5;border-color:#4f46e5;color:#fff}
+
+.om-sel{height:28px;padding:0 8px;border:1px solid #e2e8f0;border-radius:7px;
+  background:#fff;color:#475569;font-size:11.5px;font-family:inherit;cursor:pointer;
+  max-width:180px}
+
+.om-tbl td{vertical-align:top}
+.om-bc{margin-top:2px;font-size:10px;color:#94a3b8;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+.om-qty{font-size:14px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums}
+.om-qty--kam{color:#b45309}
+.om-qty--neg{color:#dc2626}
+
+/* Sotuv tezligi — necha kunga yetadi */
+.tz{display:inline-block;padding:2px 8px;border-radius:99px;
+  font-size:10.5px;font-weight:700;white-space:nowrap}
+.tz--tez  {background:#dcfce7;color:#15803d}
+.tz--orta {background:#fef3c7;color:#a16207}
+.tz--sekin{background:#fee2e2;color:#b91c1c}
+.tz--yoq  {background:#f1f5f9;color:#94a3b8}
+
+.om-more{padding:14px;text-align:center}
+.om-more__btn{height:36px;padding:0 20px;border:1px solid #e2e8f0;border-radius:9px;
+  background:#fff;color:#4f46e5;font-size:12.5px;font-weight:600;font-family:inherit;
+  cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.om-more__btn:hover:not(:disabled){background:#f8fafc}
+.om-more__btn:disabled{opacity:.5;cursor:not-allowed}
+
+@media (max-width:720px){
+  .om-stats{grid-template-columns:repeat(2,1fr)}
+  .om-sel{max-width:100%;flex:1}
 }
 </style>

@@ -86,6 +86,18 @@ export const inventoriesApi = {
     return toFrontend(res.data)
   },
 
+  // Ombor tahlili — "nega topilmadi?" sabablari. Bazani o'zgartirmaydi.
+  async tahlil(id) {
+    const res = await http.get(`/inventories/${id}/tahlil`)
+    return res.data
+  },
+
+  // Omborni tuzatish: manfiy qoldiq va partiya nomuvofiqligi
+  async omborTuzat(opts = {}) {
+    const res = await http.post('/inventories/ombor-tuzat', opts)
+    return res.data
+  },
+
   async cancel(id) {
     await http.post(`/inventories/${id}/cancel`)
   },
