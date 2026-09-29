@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { salesApi } from '@/api/sales.js'
 import { todayKey } from '@/composables/useDateTime.js'
+import { printLabels58x40 } from '@/composables/useBarcodePrint.js'
 
 // ── State ──────────────────────────────────────────────────────────
 const sales       = ref([])
@@ -171,10 +172,19 @@ async function qaytarishniBajar() {
   yuborilyapti.value = true
   qaytXato.value = ''
   try {
-    const items = detail.value.items
-      .filter(i => (qaytarish.value[i.id] || 0) > 0)
-      .map(i => ({ sale_item_id: i.id, qty: qaytarish.value[i.id] }))
+    const tanlangan = detail.value.items.filter(i => (qaytarish.value[i.id] || 0) > 0)
+    const items = tanlangan.map(i => ({ sale_item_id: i.id, qty: qaytarish.value[i.id] }))
     await salesApi.returnItems(detail.value.id, items)
+
+    // Qaytgan tovar javonga qayta qo'yiladi — eski yorlig'i ko'pincha
+    // yirtilgan yoki yo'q bo'ladi. Shuning uchun shu zahoti har bir
+    // dona uchun shtrix-kod yorlig'ini chop etamiz.
+    printLabels58x40(tanlangan.map(i => ({
+      name:    i.productName,
+      price:   i.price,
+      barcode: i.barcode,
+      qty:     Math.max(1, Math.round(Number(qaytarish.value[i.id]) || 1)),
+    })))
     showDetail.value = false
     qaytarish.value = {}
     await load()
