@@ -21,10 +21,17 @@ export function fileUrl(path) {
   return `${FILE_BASE}${path.startsWith('/') ? '' : '/'}${path}`
 }
 
+export const BRANCH_KEY = 'branch_id'
+
 // Attach JWT token to every request
 http.interceptors.request.use(cfg => {
   const token = localStorage.getItem('token')
   if (token) cfg.headers.Authorization = `Bearer ${token}`
+  // Joriy filial. Bosh ofis foydalanuvchisi tanlagan filial shu sarlavha
+  // bilan ketadi; filialga biriktirilgan xodim uchun server buni
+  // e'tiborsiz qoldiradi (u doim o'z filialida).
+  const branch = localStorage.getItem(BRANCH_KEY)
+  if (branch) cfg.headers['X-Branch-Id'] = branch
   return cfg
 })
 

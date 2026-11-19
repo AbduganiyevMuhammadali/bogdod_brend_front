@@ -2,8 +2,20 @@
 import { ref, computed, onMounted } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { usersApi } from '@/api/users.js'
+import { branchesApi } from '@/api/branches.js'
+import { useAuth } from '@/composables/useAuth.js'
 
 const WAREHOUSES = ['Asosiy sklad', 'Filial №1', 'Filial №2', 'Omborxona']
+
+// ── Filiallar ───────────────────────────────────────────────────────
+// Bosh ofis admin: istalgan filial yoki "Bosh ofis" (hamma filial).
+// Filial admini: faqat o'z filiali — server baribir shunga majburlaydi.
+const { branch: joriyFilial, canSwitchBranch } = useAuth()
+const branches = ref([])
+async function loadBranches() {
+  try { branches.value = await branchesApi.getAll() } catch { branches.value = [] }
+}
+const branchName = (u) => u.branch?.name || (u.branchId ? `Filial #${u.branchId}` : 'Bosh ofis')
 
 // Kalitlar router sahifalariga 1:1 mos — ruxsat tekshiruvi shu kalitlar bo'yicha ishlaydi
 const MODULES = [
@@ -45,7 +57,7 @@ async function loadUsers() {
   }
 }
 
-onMounted(loadUsers)
+onMounted(() => { loadUsers(); loadBranches() })
 
 // ── Search ───────────────────────────────────────────────
 const search = ref('')
@@ -73,6 +85,9 @@ function makeForm(u = null) {
     warehouse: u?.warehouse ?? WAREHOUSES[0],
     login:     u?.login     ?? '',
     role:      u?.role      ?? 'operator',
+    // Yangi xodim: bosh ofis admin uchun joriy filial standart (bo'sh = bosh ofis),
+    // filial admini uchun o'z filiali
+    branchId:  u ? (u.branchId ?? '') : (joriyFilial.value?.id ?? ''),
     active:    u?.active    !== false,
     password:  '',
     confirm:   '',
@@ -206,6 +221,7 @@ const initials = (u) => `${u.name[0] ?? ''}${u.surname[0] ?? ''}`.toUpperCase()
           <tr>
             <th>Foydalanuvchi</th>
             <th>Login</th>
+            <th>Filial</th>
             <th>Sklad</th>
             <th>Rol</th>
             <th>Holat</th>
@@ -226,6 +242,7 @@ const initials = (u) => `${u.name[0] ?? ''}${u.surname[0] ?? ''}`.toUpperCase()
               </div>
             </td>
             <td><code class="usr-login">{{ u.login }}</code></td>
+            <td><span class="wh-tag" :class="{ 'wh-tag--ho': !u.branchId }">{{ branchName(u) }}</span></td>
             <td><span class="wh-tag">{{ u.warehouse }}</span></td>
             <td>
               <span class="role-badge" :class="u.role === 'admin' ? 'role-badge--admin' : 'role-badge--op'">
@@ -249,12 +266,12 @@ const initials = (u) => `${u.name[0] ?? ''}${u.surname[0] ?? ''}`.toUpperCase()
             </td>
           </tr>
           <tr v-if="loading">
-            <td colspan="6" class="tbl__empty">
+            <td colspan="7" class="tbl__empty">
               <span class="tbl__spinner"></span> Yuklanmoqda...
             </td>
           </tr>
           <tr v-else-if="!filtered.length">
-            <td colspan="6" class="tbl__empty">Foydalanuvchi topilmadi</td>
+            <td colspan="7" class="tbl__empty">Foydalanuvchi topilmadi</td>
           </tr>
         </tbody>
       </table>
@@ -329,6 +346,21 @@ const initials = (u) => `${u.name[0] ?? ''}${u.surname[0] ?? ''}`.toUpperCase()
                 <AppIcon name="mail" :size="14" class="mform__inp-ico" />
                 <input v-model="form.email" type="email" class="mform__inp mform__inp--icon" placeholder="user@company.uz" />
               </div>
+            </div>
+
+            <div class="mform__field">
+              <label class="mform__lbl">Filial</label>
+              <div class="mform__inp-wrap">
+                <AppIcon name="map-pin" :size="14" class="mform__inp-ico" />
+                <select v-model="form.branchId" class="mform__inp mform__inp--icon mform__select" :disabled="!canSwitchBranch">
+                  <option v-if="canSwitchBranch" value="">Bosh ofis — barcha filiallar</option>
+                  <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}{{ b.active ? '' : ' (faol emas)' }}</option>
+                </select>
+              </div>
+              <p class="mform__hint">
+                <template v-if="form.branchId === ''">Bosh ofis xodimi hamma filialni ko'radi va yuqoridagi tanlagich orqali almashtiradi.</template>
+                <template v-else>Xodim faqat shu filial ma'lumotini ko'radi va shu filialda sotadi.</template>
+              </p>
             </div>
 
             <div class="mform__field">
@@ -605,6 +637,8 @@ const initials = (u) => `${u.name[0] ?? ''}${u.surname[0] ?? ''}`.toUpperCase()
   padding: 2px 7px;
   border-radius: var(--r-xs);
 }
+.wh-tag--ho { background:#e0e7ff !important; color:#4338ca !important; }
+.mform__hint { font-size:11px; color:var(--color-text-3,#64748b); margin:4px 0 0; line-height:1.4; }
 .wh-tag {
   font-size: 12px;
   background: var(--slate-100);

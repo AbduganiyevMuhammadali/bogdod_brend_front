@@ -14,6 +14,12 @@ function toFrontend(u) {
     rawRole:     u.role ?? '', // asl backend roli (masalan 'Dasturchi') — faqat Dasturchiga xos sahifalar uchun
     active:      u.active !== false,
     perms:       u.permissions ?? null,
+    // Filial: null = bosh ofis (hamma filial). `branch` — nomi bilan.
+    branchId:    u.branch_id ?? null,
+    branch:      u.branch ?? null,
+    // Hozir qaysi filialda ishlayapti (whoami/login javobida) va uni
+    // o'zgartira oladimi
+    branchLocked: !!u.branch_locked,
   }
 }
 
@@ -27,6 +33,9 @@ function toBackend(form, isNew = false) {
     warehouse:   form.warehouse   || null,
     permissions: form.perms       || null,
     active:      form.active !== undefined ? form.active : true,
+    // '' yoki null → bosh ofis; raqam → filial
+    branch_id:   form.branchId === '' || form.branchId === undefined || form.branchId === null
+                   ? null : Number(form.branchId),
   }
   if (form.password) {
     payload.password        = form.password

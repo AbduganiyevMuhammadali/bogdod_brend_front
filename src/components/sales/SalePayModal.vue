@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import QRCode from 'qrcode'
 import AppIcon from '@/components/AppIcon.vue'
 import { loadStoreSettings } from '@/composables/useStoreSettings.js'
@@ -54,6 +54,32 @@ function toUSD(v) {
 }
 
 const emit = defineEmits(['close', 'complete', 'update:discount', 'update:paymentType', 'drop-client', 'update:dueDate'])
+
+// ── Enter — "To'lash & Yakunlash" ───────────────────────────────────
+// Kassir sichqonchaga qo'l cho'zmasin: oyna ochilgach Enter sotuvni
+// yakunlaydi. Skidka maydonida ham ishlaydi (summani yozib Enter).
+//
+// Skaner oyna ochiq paytda tovar urib yuborsa, uning oxiridagi Enter
+// sotuvni yopib qo'ymasligi kerak — skaner belgilarni juda tez
+// yuboradi, shuning uchun Enter'dan oldingi belgi 50 ms dan yaqin
+// bo'lsa, bu skan deb hisoblanadi va e'tiborsiz qoldiriladi.
+let oxirgiBelgi = 0
+function onEnter(e) {
+  if (e.key.length === 1) { oxirgiBelgi = Date.now(); return }
+  if (e.key !== 'Enter' || e.repeat || props.saving) return
+  if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
+  if (Date.now() - oxirgiBelgi < 50) return
+
+  const el = document.activeElement
+  // Fokusdagi tugma (Bekor qilish, to'lov turi) o'zi bosilsin;
+  // sana tanlagichda Enter sanani tasdiqlaydi
+  if (el?.tagName === 'BUTTON' || el?.tagName === 'TEXTAREA' || el?.type === 'date') return
+
+  e.preventDefault()
+  emit('complete')
+}
+onMounted(()   => window.addEventListener('keydown', onEnter))
+onUnmounted(() => window.removeEventListener('keydown', onEnter))
 
 // ── Qarz muddati ────────────────────────────────────────────────────
 // Har sotuvga alohida sana. Bo'sh qoldirilsa — muddatsiz qarz.

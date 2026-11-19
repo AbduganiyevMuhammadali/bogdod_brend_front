@@ -11,8 +11,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { debtorsApi } from '@/api/debtors.js'
+import { salesApi } from '@/api/sales.js'
 import { showToast } from '@/composables/useToast.js'
-import { canEdit } from '@/composables/usePerms.js'
+import { canEdit, canAdd } from '@/composables/usePerms.js'
 
 const fmt = v => new Intl.NumberFormat('uz-UZ').format(Math.round(Number(v) || 0))
 
@@ -177,6 +178,54 @@ async function muddatOzgart(q, sana) {
   }
 }
 
+// ── To'lov qabul qilish ─────────────────────────────────────────────
+// Qarz undiruvchi mijoz kartochkasini ochib, pulni shu yerda qayd etadi.
+// Server to'lovni eng eski qarzdan boshlab sotuvlarga taqsimlaydi.
+const tolov      = ref(false)
+const tolovSumma = ref('')
+const tolovTur   = ref('Naqd')
+const tolovIzoh  = ref('')
+const tolovYuk   = ref(false)
+const TOLOV_TURLARI = ['Naqd', 'Karta', "O'tkazma"]
+
+const jamiQarz = computed(() => (karta.value?.qarzlar || []).reduce((a, q) => a + (Number(q.debt) || 0), 0))
+
+function tolovOch() {
+  tolovSumma.value = String(Math.round(jamiQarz.value) || '')
+  tolovTur.value   = 'Naqd'
+  tolovIzoh.value  = ''
+  tolov.value = true
+}
+const tolovQoldi = computed(() => jamiQarz.value - (Number(String(tolovSumma.value).replace(/\D/g, '')) || 0))
+
+async function tolovQabul(allowCredit = false) {
+  const amount = Number(String(tolovSumma.value).replace(/\D/g, '')) || 0
+  if (amount <= 0) { showToast('Summani kiriting', 'err'); return }
+  tolovYuk.value = true
+  try {
+    const r = await salesApi.payDebt({
+      client_id: karta.value.client.id, amount, payment_type: tolovTur.value,
+      description: tolovIzoh.value || undefined,
+      allow_credit: allowCredit || undefined,
+    })
+    showToast(r.message || 'To\'lov qabul qilindi', 'ok', 4000)
+    tolov.value = false
+    await ochKarta(karta.value.client.id)
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    // To'lov qarzdan ko'p — kassir tasdiqlasa ortig'i kreditga yoziladi
+    if (e?.response?.status === 409 && d?.code === 'QARZDAN_KOP') {
+      if (confirm(`${d.message}\n\nOrtiqcha ${fmt(d.ortiqcha)} so'm mijoz kreditiga yozilsinmi?`)) {
+        tolovYuk.value = false
+        return tolovQabul(true)
+      }
+    } else {
+      showToast(d?.message || 'To\'lovni saqlab bo\'lmadi', 'err')
+    }
+  } finally { tolovYuk.value = false }
+}
+
 function sanaMatn(d) {
   if (!d) return 'Muddatsiz'
   return new Date(d).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -314,14 +363,50 @@ const KIND_NOM = { izoh: 'Izoh', qongiroq: 'Qo\'ng\'iroq', uchrashuv: 'Uchrashuv
             <!-- Umumiy -->
             <div class="dsum">
               <div class="dsum__item">
-                <div class="dsum__lbl">Jami qarz</div>
-                <div class="dsum__val dsum__val--red">
-                  {{ fmt(karta.qarzlar.reduce((a,q)=>a+q.debt,0)) }} so'm
-                </div>
+                <div class="dsum__lbl">Qolgan qarz</div>
+                <div class="dsum__val dsum__val--red">{{ fmt(jamiQarz) }} so'm</div>
               </div>
               <div class="dsum__item">
                 <div class="dsum__lbl">Hujjatlar</div>
                 <div class="dsum__val">{{ karta.qarzlar.length }} ta</div>
+              </div>
+              <div v-if="karta.client.kredit > 0" class="dsum__item">
+                <div class="dsum__lbl">Mijoz krediti</div>
+                <div class="dsum__val dsum__val--green">+{{ fmt(karta.client.kredit) }} so'm</div>
+              </div>
+              <button v-if="canAdd('payments') && jamiQarz > 0" class="dsum__pay" @click="tolovOch">
+                <AppIcon name="dollar-sign" :size="15" :stroke-width="2.5"/> To'lov qabul qilish
+              </button>
+            </div>
+
+            <!-- To'lov formasi -->
+            <div v-if="tolov" class="dpayform">
+              <div class="dpayform__row">
+                <div class="dpayform__f">
+                  <label>Summa (so'm)</label>
+                  <input class="dpayform__inp dpayform__inp--lg" inputmode="numeric"
+                         :value="tolovSumma ? fmt(tolovSumma) : ''" placeholder="0"
+                         @input="tolovSumma = $event.target.value.replace(/\D/g, '')"
+                         @keydown.enter="tolovQabul()"/>
+                </div>
+                <div class="dpayform__f">
+                  <label>To'lov turi</label>
+                  <div class="dpayform__types">
+                    <button v-for="t in TOLOV_TURLARI" :key="t" class="dpayform__t" :class="{ on: tolovTur === t }" @click="tolovTur = t">{{ t }}</button>
+                  </div>
+                </div>
+              </div>
+              <input v-model="tolovIzoh" class="dpayform__inp" placeholder="Izoh (ixtiyoriy)"/>
+              <div class="dpayform__after" :class="tolovQoldi <= 0 ? 'ok' : ''">
+                <template v-if="tolovQoldi > 0">To'lovdan keyin qoladi: <b>{{ fmt(tolovQoldi) }} so'm</b></template>
+                <template v-else-if="tolovQoldi === 0">✓ Qarz to'liq yopiladi</template>
+                <template v-else>✓ Qarz yopiladi, <b>{{ fmt(-tolovQoldi) }} so'm</b> kreditga yoziladi (tasdiq so'raladi)</template>
+              </div>
+              <div class="dpayform__acts">
+                <button class="dpayform__b dpayform__b--ghost" @click="tolov = false">Bekor</button>
+                <button class="dpayform__b" :disabled="tolovYuk" @click="tolovQabul()">
+                  <AppIcon :name="tolovYuk ? 'loader' : 'check'" :size="14"/> Qabul qilish
+                </button>
               </div>
             </div>
 
@@ -364,7 +449,10 @@ const KIND_NOM = { izoh: 'Izoh', qongiroq: 'Qo\'ng\'iroq', uchrashuv: 'Uchrashuv
                          @change="e => muddatOzgart(q, e.target.value)"/>
                   <span class="dbadge" :class="`dbadge--${q.muddat}`">{{ sanaMatn(q.dueDate) }}</span>
                 </div>
-                <div class="dq__sum">{{ fmt(q.debt) }}</div>
+                <div class="dq__sum">
+                  {{ fmt(q.debt) }}
+                  <div v-if="q.debtPaid > 0" class="dq__paid">{{ fmt(q.debtTotal) }} dan {{ fmt(q.debtPaid) }} to'langan</div>
+                </div>
               </div>
             </div>
 
@@ -504,6 +592,28 @@ const KIND_NOM = { izoh: 'Izoh', qongiroq: 'Qo\'ng\'iroq', uchrashuv: 'Uchrashuv
 .dsum__lbl { font-size:11px; color:#64748b; }
 .dsum__val { font-size:16px; font-weight:800; color:#0f172a; margin-top:2px; }
 .dsum__val--red { color:#b91c1c; }
+.dsum__val--green { color:#047857; }
+.dsum__pay { display:flex; align-items:center; gap:6px; padding:0 16px; font-size:13px; font-weight:700; color:#fff; background:linear-gradient(135deg,#059669,#047857); border:none; border-radius:9px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.dsum__pay:hover { opacity:.9; }
+.dq__paid { font-size:10.5px; font-weight:600; color:#047857; margin-top:2px; }
+
+/* To'lov formasi */
+.dpayform { display:flex; flex-direction:column; gap:10px; padding:14px; margin-bottom:16px; background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:11px; }
+.dpayform__row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.dpayform__f { display:flex; flex-direction:column; gap:5px; }
+.dpayform__f label { font-size:11.5px; font-weight:700; color:#166534; }
+.dpayform__inp { height:38px; padding:0 12px; font-size:13.5px; border:1.5px solid #bbf7d0; border-radius:8px; outline:none; background:#fff; font-family:inherit; width:100%; }
+.dpayform__inp--lg { height:44px; font-size:20px; font-weight:800; letter-spacing:-.02em; }
+.dpayform__inp:focus { border-color:#16a34a; }
+.dpayform__types { display:flex; gap:6px; }
+.dpayform__t { flex:1; height:38px; font-size:12.5px; font-weight:600; color:#334155; background:#fff; border:1.5px solid #e2e8f0; border-radius:8px; cursor:pointer; font-family:inherit; }
+.dpayform__t.on { background:#16a34a; border-color:#16a34a; color:#fff; }
+.dpayform__after { font-size:12.5px; color:#334155; }
+.dpayform__after.ok { color:#047857; font-weight:600; }
+.dpayform__acts { display:flex; justify-content:flex-end; gap:8px; }
+.dpayform__b { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; font-size:13px; font-weight:700; color:#fff; background:#16a34a; border:1.5px solid #16a34a; border-radius:8px; cursor:pointer; font-family:inherit; }
+.dpayform__b:disabled { opacity:.5; cursor:not-allowed; }
+.dpayform__b--ghost { color:#334155; background:#fff; border-color:#e2e8f0; }
 
 .dsec { margin-bottom:18px; }
 .dsec__t { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#64748b; margin-bottom:8px; }

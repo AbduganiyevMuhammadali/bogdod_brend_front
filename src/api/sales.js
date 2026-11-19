@@ -34,6 +34,13 @@ function toFront(s) {
     paidSum:      Number(s.paid_sum)     || 0,
     paidUSD:      Number(s.paid_usd)     || 0,
     debtSum:      Number(s.debt_sum)     || 0,
+    // Qarzdan to'langani va qolgani (qarz to'lovlari eng eski sotuvdan taqsimlanadi)
+    debtPaid:     Number(s.debt_paid)    || 0,
+    debtRemaining: s.debt_remaining !== undefined
+                     ? Number(s.debt_remaining) || 0
+                     : Math.max(0, (Number(s.debt_sum) || 0) - (Number(s.debt_paid) || 0)),
+    // Shu sotuv bo'yicha kassadan naqd qaytarilgan pul
+    refundedSum:  Number(s.refunded_sum) || 0,
     returnedSum:  Number(s.returned_sum) || 0,
     debtUSD:      Number(s.debt_usd)     || 0,
     exchangeRate: Number(s.exchange_rate)|| 0,

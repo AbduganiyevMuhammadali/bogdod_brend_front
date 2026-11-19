@@ -15,6 +15,7 @@ import { useGlobalScanner } from '@/composables/useGlobalScanner.js'
 import { beep }         from '@/composables/useBeep.js'
 import { canAdd }       from '@/composables/usePerms.js'
 import { loadStoreSettings } from '@/composables/useStoreSettings.js'
+import { showToast }    from '@/composables/useToast.js'
 import { fmtDate, fmtTime, fmtDateTime, todayKey } from '@/composables/useDateTime.js'
 
 const route  = useRoute()
@@ -368,7 +369,9 @@ async function searchClients(q) {
 }
 function pickClient(c) {
   selectedClient.value=c; clientQ.value=c.name; clientOpen.value=false
-  if (c.balance < 0) paymentType.value = 'Qarz'
+  // Mijoz tanlangani sotuvni avtomatik QARZGA aylantirmaydi. Ilgari qarzi
+  // bor mijoz tanlansa to'lov turi jimgina "Qarz" bo'lib qolardi va naqd
+  // sotuv nasiya deb yozilib ketardi. Qarz — kassir ataylab tanlaganda.
 }
 function dropClient() { selectedClient.value=null; clientQ.value='' }
 
@@ -686,21 +689,32 @@ function openDebtModal(c){
   Object.assign(debtForm,{amount:c.balance<0?String(Math.abs(Math.round(c.balance))):'',payment_type:'Naqd',description:''})
   showDebtModal.value=true
 }
-async function saveDebt(){
+async function saveDebt(allowCredit=false){
   if(!debtClient.value||!debtForm.amount||Number(debtForm.amount)<=0){flashErr('Summani kiriting');return}
   debtSaving.value=true
   try{
-    await salesApi.payDebt({
+    const r = await salesApi.payDebt({
       client_id:     debtClient.value.id,
       amount:        Number(debtForm.amount),
       payment_type:  debtForm.payment_type,
       description:   debtForm.description || undefined,
       exchange_rate: exchangeRate.value,
+      allow_credit:  allowCredit || undefined,
     })
     showDebtModal.value=false
     loadClients()
     flashSuccess()
-  }catch(e){flashErr(e.response?.data?.message??'Xatolik')}
+    if (r?.message) showToast(r.message, 'ok', 4000)
+  }catch(e){
+    const d=e.response?.data
+    // Qarzdan ko'p to'lov — tasdiq bilan ortig'i kreditga yoziladi
+    if(e.response?.status===409 && d?.code==='QARZDAN_KOP'){
+      debtSaving.value=false
+      if(confirm(`${d.message}\n\nOrtiqcha ${fmt(d.ortiqcha)} so'm mijoz kreditiga yozilsinmi?`)) return saveDebt(true)
+      return
+    }
+    flashErr(d?.message??'Xatolik')
+  }
   finally{debtSaving.value=false}
 }
 
@@ -913,6 +927,31 @@ function onKey(e) {
   if(e.key==='F9'){e.preventDefault(); if(cart.value.length) parkCurrent(); else if(parkedSales.value.length) showParkedPanel.value=!showParkedPanel.value}
   if(e.key==='F12'){e.preventDefault(); if(cart.value.length)showPayModal.value=true}
   if(e.key==='Escape'){ showPayModal.value=false; showParkedPanel.value=false }
+  if(e.key==='Enter') enterBilanTolov(e)
+}
+
+// Enter — savat to'la bo'lsa to'lov oynasini ochadi (F12 bilan bir xil).
+// To'lov oynasi ichidagi Enter'ni SalePayModal o'zi ushlaydi.
+//
+// Skaner Enter'i bu yerga yetib kelmaydi — useGlobalScanner uni capture
+// bosqichida to'xtatadi. Qo'lda yozilayotgan maydonda (shtrix-kod, qidiruv,
+// son) Enter o'sha maydonniki; fokusdagi tugmada esa tugmaning o'zi bosiladi.
+function enterBilanTolov(e) {
+  if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
+  if (!cart.value.length || saving.value || !canAdd('sales')) return
+  if (showPayModal.value || showCliModal.value || showQarzSotuv.value || showCashEntryModal.value
+      || showDebtModal.value || showTxnModal.value || showSaleModal.value
+      || showCameraScanner.value || showParkedPanel.value) return
+
+  const el = document.activeElement
+  const tag = el?.tagName
+  if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A' || el?.isContentEditable) return
+  // Shtrix-kod maydoni bo'sh bo'lsa — Enter to'lovga o'tadi,
+  // yozilgan bo'lsa — o'sha kodni qidiradi (onBarcodeScan)
+  if (tag === 'INPUT' && !(el === barcodeEl.value && !barcodeQ.value.trim())) return
+
+  e.preventDefault()
+  showPayModal.value = true
 }
 onMounted(async()=>{
   window.addEventListener('keydown',onKey)

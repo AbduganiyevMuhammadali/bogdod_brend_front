@@ -2,6 +2,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { clientsApi } from '@/api/clients.js'
+import { showToast } from '@/composables/useToast.js'
 
 // ── State ─────────────────────────────────────────────────────────
 const clients   = ref([])
@@ -99,7 +100,7 @@ function openDebtModal(client) {
   showDebt.value = true
 }
 
-async function submitDebt() {
+async function submitDebt(allowCredit = false) {
   const amt = Number(debtForm.amount)
   if (!amt || amt <= 0) return
   debtPaying.value = true
@@ -109,17 +110,28 @@ async function submitDebt() {
       amount:       amt,
       payment_type: debtForm.payment_type,
       description:  `${debtClient.value.name} — qarz to'lovi`,
+      allow_credit: allowCredit || undefined,
     })
     const idx = clients.value.findIndex(c => c.id === debtClient.value.id)
     if (idx !== -1) {
-      clients.value[idx] = { ...clients.value[idx], balance: Number(res.client.balance) }
+      clients.value[idx] = { ...clients.value[idx], balance: Number(res.balance ?? res.client?.balance) }
     }
     // refresh ledger if open for same client
     if (showLedger.value && ledgerClient.value?.id === debtClient.value.id) {
       openLedger(clients.value[clients.value.findIndex(c => c.id === debtClient.value.id)])
     }
     showDebt.value = false
-  } catch { /* handled silently */ }
+    if (res?.message) showToast(res.message, 'ok', 4000)
+  } catch (e) {
+    const d = e?.response?.data
+    // To'lov qarzdan ko'p — tasdiq bilan ortig'i mijoz kreditiga yoziladi
+    if (e?.response?.status === 409 && d?.code === 'QARZDAN_KOP') {
+      debtPaying.value = false
+      if (confirm(`${d.message}\n\nOrtiqcha ${fmt(d.ortiqcha)} so'm mijoz kreditiga yozilsinmi?`)) return submitDebt(true)
+      return
+    }
+    showToast(d?.message || 'To\'lovni saqlab bo\'lmadi', 'err')
+  }
   finally { debtPaying.value = false }
 }
 
@@ -442,6 +454,7 @@ const TABS = [
                   :class="{
                     'ldg-row--sale':    e.type === 'sale',
                     'ldg-row--payment': e.type === 'payment',
+                    'ldg-row--refund':  e.type === 'refund',
                     'ldg-row--cancelled': e.status === 'cancelled',
                   }"
                 >
@@ -453,17 +466,21 @@ const TABS = [
                     <div class="ldg-desc">
                       <span
                         class="ldg-type-badge"
-                        :class="e.type === 'sale' ? 'ldg-type-badge--sale' : 'ldg-type-badge--pay'"
+                        :class="e.type === 'sale' ? 'ldg-type-badge--sale' : e.type === 'refund' ? 'ldg-type-badge--refund' : 'ldg-type-badge--pay'"
                       >
-                        {{ e.type === 'sale' ? 'Sotuv' : "To'lov" }}
+                        {{ e.type === 'sale' ? 'Sotuv' : e.type === 'refund' ? 'Qaytarish' : "To'lov" }}
                       </span>
                       <span class="ldg-desc-text">{{ e.description }}</span>
                     </div>
                     <span v-if="e.status === 'cancelled'" class="ldg-cancelled-badge">Bekor qilingan</span>
+                    <span v-if="e.type === 'sale' && e.debt > 0 && e.debt_paid > 0 && e.status !== 'cancelled'" class="ldg-paid-badge">
+                      qarzdan {{ fmt(e.debt_paid) }} to'langan
+                    </span>
                   </td>
                   <td><span class="ldg-ptype">{{ e.payment_type || '—' }}</span></td>
                   <td class="ta-r">
                     <span v-if="e.debit > 0" class="ldg-debit">{{ fmt(e.debit) }}</span>
+                    <span v-else-if="e.type === 'refund'" class="ldg-refund">−{{ fmt(e.refund) }} naqd</span>
                     <span v-else class="ldg-zero">—</span>
                   </td>
                   <td class="ta-r">
@@ -472,7 +489,7 @@ const TABS = [
                   </td>
                   <td class="ta-r">
                     <span
-                      v-if="e.status !== 'cancelled'"
+                      v-if="e.status !== 'cancelled' && e.type !== 'refund'"
                       class="ldg-balance"
                       :class="e.running_balance < 0 ? 'ldg-balance--neg' : 'ldg-balance--pos'"
                     >
@@ -495,9 +512,9 @@ const TABS = [
                 <div class="ldg-ecard__top">
                   <span
                     class="ldg-type-badge"
-                    :class="e.type === 'sale' ? 'ldg-type-badge--sale' : 'ldg-type-badge--pay'"
+                    :class="e.type === 'sale' ? 'ldg-type-badge--sale' : e.type === 'refund' ? 'ldg-type-badge--refund' : 'ldg-type-badge--pay'"
                   >
-                    {{ e.type === 'sale' ? 'Sotuv' : "To'lov" }}
+                    {{ e.type === 'sale' ? 'Sotuv' : e.type === 'refund' ? 'Qaytarish' : "To'lov" }}
                   </span>
                   <span class="ldg-ecard__date">{{ fmtDate(e.date) }} · {{ fmtTime(e.date) }}</span>
                 </div>
@@ -507,8 +524,9 @@ const TABS = [
                   <span class="ldg-ecard__ptype">{{ e.payment_type || '—' }}</span>
                   <span v-if="e.debit > 0" class="ldg-debit">−{{ fmt(e.debit) }} so'm</span>
                   <span v-else-if="e.credit > 0" class="ldg-credit">+{{ fmt(e.credit) }} so'm</span>
+                  <span v-else-if="e.type === 'refund'" class="ldg-refund">−{{ fmt(e.refund) }} so'm naqd</span>
                 </div>
-                <div v-if="e.status !== 'cancelled'" class="ldg-ecard__bal">
+                <div v-if="e.status !== 'cancelled' && e.type !== 'refund'" class="ldg-ecard__bal">
                   <span>Qoldiq</span>
                   <span class="ldg-balance" :class="e.running_balance < 0 ? 'ldg-balance--neg' : 'ldg-balance--pos'">
                     {{ e.running_balance < 0 ? '−' : '+' }}{{ fmt(Math.abs(e.running_balance)) }} so'm
@@ -761,6 +779,9 @@ const TABS = [
 .ldg-debit  { font-weight: 700; color: #1d4ed8; font-size: 13px; }
 .ldg-credit { font-weight: 700; color: #16a34a; font-size: 13px; }
 .ldg-zero   { color: var(--color-text-3); }
+.ldg-type-badge--refund { background: #fef3c7; color: #b45309; }
+.ldg-refund { font-size: 12.5px; font-weight: 700; color: #b45309; }
+.ldg-paid-badge { display: inline-block; margin-top: 3px; font-size: 10.5px; font-weight: 700; color: #047857; background: #d1fae5; padding: 1px 7px; border-radius: 99px; }
 .ldg-balance { font-size: 12.5px; font-weight: 800; padding: 2px 8px; border-radius: var(--r-sm); }
 .ldg-balance--neg { background: var(--rose-50); color: var(--rose-600); }
 .ldg-balance--pos { background: var(--emerald-50); color: var(--emerald-700); }

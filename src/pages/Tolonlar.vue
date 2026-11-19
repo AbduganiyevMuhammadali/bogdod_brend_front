@@ -28,17 +28,21 @@ const dateLabel = computed(() => {
 // ── Ma'lumotlarni yuklash ─────────────────────────────────────────
 const loading = ref(false)
 const txns    = ref([])
-const summary = ref({ income: 0, expense: 0, sale: 0, refund: 0, debt_payment: 0, net: 0 })
+const summary = ref({ income: 0, expense: 0, sale: 0, refund: 0, debt_payment: 0, opening: 0, net: 0 })
+// To'lov turi bo'yicha sof tushum — kassada haqiqatan qancha naqd, qancha karta
+const byPayType = ref({})
 
 async function load() {
   loading.value = true
   try {
     const res = await salesApi.getCashReport({ date_from: selDate.value, date_to: selDate.value })
     txns.value    = res.transactions ?? []
-    summary.value = res.summary ?? { income: 0, expense: 0, sale: 0, refund: 0, debt_payment: 0, net: 0 }
+    summary.value = res.summary ?? { income: 0, expense: 0, sale: 0, refund: 0, debt_payment: 0, opening: 0, net: 0 }
+    byPayType.value = res.byPayType ?? {}
   } catch {
     txns.value    = []
-    summary.value = { income: 0, expense: 0, sale: 0, refund: 0, debt_payment: 0, net: 0 }
+    summary.value = { income: 0, expense: 0, sale: 0, refund: 0, debt_payment: 0, opening: 0, net: 0 }
+    byPayType.value = {}
   } finally { loading.value = false }
 }
 
@@ -49,7 +53,7 @@ onMounted(load)
 
 // ── Hisob-kitob ───────────────────────────────────────────────────
 const totalKirim  = computed(() =>
-  (summary.value.income || 0) + (summary.value.sale || 0) + (summary.value.debt_payment || 0)
+  (summary.value.income || 0) + (summary.value.sale || 0) + (summary.value.debt_payment || 0) + (summary.value.opening || 0)
 )
 const totalChiqim = computed(() =>
   (summary.value.expense || 0) + (summary.value.refund || 0)
@@ -106,6 +110,7 @@ const FILTER_TABS = [
   { key: 'debt_payment', label: "Qarz to'lovlari"},
   { key: 'income',       label: 'Kirimlar'       },
   { key: 'expense',      label: 'Chiqimlar'      },
+  { key: 'refund',       label: 'Qaytarishlar'   },
 ]
 
 const filtered = computed(() =>
@@ -175,7 +180,10 @@ function fmtTime(dateStr) {
         <div class="scard__body">
           <p class="scard__lbl">Kassa qoldig'i</p>
           <p class="scard__val">{{ fmt(qoldiq) }} <em>so'm</em></p>
-          <p class="scard__sub">{{ txns.length }} ta tranzaksiya</p>
+          <p class="scard__sub">
+            {{ txns.length }} ta tranzaksiya
+            <template v-for="(v, k) in byPayType" :key="k"> · {{ k }}: {{ fmt(v) }}</template>
+          </p>
         </div>
       </div>
     </div>

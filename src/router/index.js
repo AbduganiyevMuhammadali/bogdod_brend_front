@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { isLoggedIn, logout } from '@/composables/useAuth.js'
-import { canView, isDasturchi } from '@/composables/usePerms.js'
+import { canView, isDasturchi, isAdmin } from '@/composables/usePerms.js'
 import { showToast } from '@/composables/useToast.js'
 
 const routes = [
@@ -19,6 +19,8 @@ const routes = [
   { path: '/payments',   component: () => import('@/pages/Tolonlar.vue'),      meta: { title: 'Kassa',          module: 'payments' } },
   { path: '/returns',    component: () => import('@/pages/Qaytarishlar.vue'),  meta: { title: 'Qaytarishlar',   module: 'returns' } },
   { path: '/users',      component: () => import('@/pages/Users.vue'),         meta: { title: 'nav.users',      module: 'users' } },
+  // Filiallar — faqat Admin/Dasturchi (rol bo'yicha, modul ruxsati emas)
+  { path: '/branches',   component: () => import('@/pages/Filiallar.vue'),     meta: { title: 'Filiallar',      requiresAdmin: true } },
   // Hisobotlar to'liq ekranda ochiladi (Sotuv sahifasi kabi): jadvalda
   // ko'proq satr ko'rinsin, chap menyu joy egallamasin.
   { path: '/reports',    component: () => import('@/pages/Reports.vue'),       meta: { title: 'nav.reports',    module: 'reports', fullscreen: true } },
@@ -49,6 +51,11 @@ router.beforeEach((to, _from, next) => {
 
   // Faqat "Dasturchi" hisobi kira oladigan sahifalar — Admin ham kirmaydi
   if (to.meta.requiresDasturchi && !isDasturchi.value) {
+    return next(firstAllowedPath() || '/dashboard')
+  }
+  // Faqat Admin (va Dasturchi) — filiallarni boshqarish
+  if (to.meta.requiresAdmin && !isAdmin.value) {
+    showToast("Bu bo'lim faqat administrator uchun", 'err')
     return next(firstAllowedPath() || '/dashboard')
   }
 

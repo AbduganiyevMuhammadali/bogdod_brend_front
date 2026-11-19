@@ -5,13 +5,13 @@ import AppIcon from '@/components/AppIcon.vue'
 import { useI18n } from '@/i18n/index.js'
 import { productsApi } from '@/api/products.js'
 import { useAuth } from '@/composables/useAuth.js'
-import { canView, isDasturchi } from '@/composables/usePerms.js'
+import { canView, isDasturchi, isAdmin } from '@/composables/usePerms.js'
 
 const emit = defineEmits(['logout'])
 const { t } = useI18n()
 const route  = useRoute()
 const router = useRouter()
-const { me } = useAuth()
+const { me, branch } = useAuth()
 
 function isActive(key) { return route.path === '/' + key }
 function go(key)       { router.push('/' + key) }
@@ -31,8 +31,8 @@ const visibleGroups = computed(() =>
   navGroups
     // Ba'zi bandlar boshqa modulning ruxsatiga tayanadi (masalan "Tezkor
     // kiritish" — products). Shunda `module` ko'rsatiladi, aks holda
-    // bandning o'z kaliti tekshiriladi.
-    .map(g => ({ ...g, items: g.items.filter(i => canView(i.module || i.key)) }))
+    // bandning o'z kaliti tekshiriladi. `adminOnly` — rol bo'yicha.
+    .map(g => ({ ...g, items: g.items.filter(i => i.adminOnly ? isAdmin.value : canView(i.module || i.key)) }))
     .filter(g => g.items.length)
 )
 
@@ -84,6 +84,8 @@ const navGroups = [
     label: 'Tizim',
     items: [
       { key: 'users', label: 'Foydalanuvchilar', icon: 'user-check', color: '#34d399', bg: 'rgba(52,211,153,0.14)' },
+      // Filiallar — faqat Admin/Dasturchi (yangi filial ochish, xodim biriktirish)
+      { key: 'branches', label: 'Filiallar', icon: 'map-pin', color: '#f472b6', bg: 'rgba(244,114,182,0.14)', adminOnly: true },
     ],
   },
 ]
@@ -158,7 +160,7 @@ const navGroups = [
         </div>
         <div class="sb__user-info">
           <p class="sb__user-name">{{ displayName }}</p>
-          <p class="sb__user-role">{{ roleLabel }}</p>
+          <p class="sb__user-role">{{ roleLabel }}<template v-if="branch"> · {{ branch.name }}</template></p>
         </div>
         <button class="sb__user-out" :title="t('user.signOut')" @click="emit('logout')">
           <AppIcon name="log-out" :size="14" :stroke-width="1.75" />

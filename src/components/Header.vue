@@ -9,8 +9,18 @@ import { useAuth, logout } from '@/composables/useAuth.js'
 defineProps({ title: { type: String, default: '' } })
 
 const { locale, t, setLocale } = useI18n()
-const { me } = useAuth()
+const { me, branch, branches, canSwitchBranch, setBranch } = useAuth()
 const router = useRouter()
+
+// ── Filial ──────────────────────────────────────────────────────────
+// Filial xodimi uchun — shunchaki nom (o'zgartira olmaydi).
+// Bosh ofis uchun — ro'yxatdan tanlash; tanlangach sahifa qayta yuklanadi.
+const branchOpen = ref(false)
+function chooseBranch(id) {
+  branchOpen.value = false
+  if (branch.value?.id === id) return
+  setBranch(id)
+}
 
 // Joriy foydalanuvchi
 const displayName = computed(() => {
@@ -44,6 +54,7 @@ onUnmounted(() => {
 function onDocClick(e) {
   if (!e.target.closest('.profile-btn')) profileOpen.value = false
   if (!e.target.closest('.lang-btn'))    langOpen.value    = false
+  if (!e.target.closest('.branch-btn'))  branchOpen.value  = false
 }
 
 const time = () => now.value.toLocaleTimeString('en-US', {
@@ -89,8 +100,46 @@ function chooseLang(code) {
       </div>
     </div>
 
-    <!-- Right: clock + lang + notif + profile -->
+    <!-- Right: branch + clock + lang + notif + profile -->
     <div class="hdr__right">
+      <!-- Filial: qaysi do'konda ishlanayotgani doim ko'rinib tursin -->
+      <div
+        v-if="branch"
+        class="branch-btn"
+        :class="{ 'branch-btn--static': !canSwitchBranch }"
+        :title="canSwitchBranch ? 'Filialni tanlash' : 'Siz shu filialga biriktirilgansiz'"
+        @click.stop="canSwitchBranch && (branchOpen = !branchOpen)"
+      >
+        <AppIcon name="map-pin" :size="13" class="branch-btn__ico" />
+        <span class="branch-btn__name">{{ branch.name }}</span>
+        <AppIcon v-if="canSwitchBranch" name="chevron-down" :size="12" class="branch-btn__chev" :class="{ rotated: branchOpen }" />
+
+        <transition name="dd">
+          <div v-if="branchOpen" class="branch-drop" @click.stop>
+            <p class="lang-drop__label">Filialni tanlang</p>
+            <button
+              v-for="b in branches" :key="b.id"
+              class="lang-item"
+              :class="{ 'is-active': branch.id === b.id, 'is-off': !b.active }"
+              @click="chooseBranch(b.id)"
+            >
+              <AppIcon name="map-pin" :size="13" class="branch-item__ico" />
+              <span class="lang-item__label">
+                {{ b.name }}
+                <span v-if="b.isMain" class="branch-item__main">asosiy</span>
+                <span v-if="!b.active" class="branch-item__main branch-item__off">faol emas</span>
+              </span>
+              <AppIcon v-if="branch.id === b.id" name="check" :size="13" class="lang-item__check" />
+            </button>
+            <div class="drop-hr" style="margin:6px 0" />
+            <button class="lang-item" @click="branchOpen = false; router.push('/branches')">
+              <AppIcon name="settings" :size="13" class="branch-item__ico" />
+              <span class="lang-item__label">Filiallarni boshqarish</span>
+            </button>
+          </div>
+        </transition>
+      </div>
+
       <!-- Clock -->
       <div class="clock">
         <AppIcon name="calendar" :size="13" />
@@ -265,6 +314,48 @@ function chooseLang(code) {
 .clock__time { font-weight: 600; color: var(--color-text); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 
 /* Language switcher */
+/* Filial chipi */
+.branch-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--indigo-200, #c7d2fe);
+  border-radius: var(--r-md);
+  background: var(--indigo-50, #eef2ff);
+  color: var(--indigo-700, #4338ca);
+  cursor: pointer;
+  user-select: none;
+  max-width: 220px;
+  transition: background var(--t-base);
+}
+.branch-btn:hover { background: var(--indigo-100, #e0e7ff); }
+.branch-btn--static { cursor: default; }
+.branch-btn--static:hover { background: var(--indigo-50, #eef2ff); }
+.branch-btn__ico  { flex-shrink: 0; }
+.branch-btn__name { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.branch-btn__chev { color: var(--indigo-400, #818cf8); transition: transform var(--t-base); flex-shrink: 0; }
+.branch-btn__chev.rotated { transform: rotate(180deg); }
+.branch-drop {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  width: 240px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  z-index: 110;
+  padding: 8px;
+  overflow: hidden;
+  color: var(--color-text);
+}
+.branch-item__ico  { color: var(--color-text-3); flex-shrink: 0; }
+.branch-item__main { margin-left: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--indigo-500, #6366f1); background: var(--indigo-50, #eef2ff); padding: 1px 6px; border-radius: 99px; }
+.branch-item__off  { color: #b91c1c; background: #fee2e2; }
+.lang-item.is-off  { opacity: .55; }
+
 .lang-btn {
   position: relative;
   display: flex;
