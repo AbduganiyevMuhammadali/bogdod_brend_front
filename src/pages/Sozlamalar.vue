@@ -4,6 +4,10 @@ import AppIcon from '@/components/AppIcon.vue'
 import { backupApi } from '@/api/backup.js'
 import { botApi } from '@/api/bot.js'
 import { showToast } from '@/composables/useToast.js'
+import { useRoute } from 'vue-router'
+import { aiApi } from '@/api/ai.js'
+import { usePerms } from '@/composables/usePerms.js'
+import { loadStatus as reloadAiStatus } from '@/composables/useAiAgent.js'
 
 const STORAGE_KEY = 'pos_settings'
 
@@ -135,19 +139,93 @@ async function botUzish(link) {
 
 onUnmounted(() => clearInterval(botTimer))
 
+// ── AI yordamchi (Gemini) ───────────────────────────────────────────
+// Kalit va model serverda (app_setting) saqlanadi — hamma qurilma uchun
+// bir xil. Faqat admin ko'radi va o'zgartiradi.
+const route = useRoute()
+const { isAdmin } = usePerms()
+const ai = reactive({
+  loading: true, enabled: true, greeting: true,
+  hasKey: false, keyMasked: '', keyFromEnv: false,
+  model: '', customModel: '', thinking: 'low', ttsModel: '', voice: 'Kore',
+  models: [], ttsModels: [], voices: [], thinkingLevels: [],
+  apiKeyInput: '', showKey: false, saving: false, testing: false, testResult: null,
+})
+
+async function loadAi() {
+  ai.loading = true
+  try {
+    const r = await aiApi.getSettings()
+    Object.assign(ai, {
+      enabled: r.enabled, greeting: r.greeting, hasKey: r.hasKey, keyMasked: r.keyMasked, keyFromEnv: r.keyFromEnv,
+      model: r.model, thinking: r.thinking, ttsModel: r.ttsModel, voice: r.voice,
+      models: r.models, ttsModels: r.ttsModels, voices: r.voices, thinkingLevels: r.thinkingLevels,
+    })
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'AI sozlamalari yuklanmadi', 'err')
+  } finally { ai.loading = false }
+}
+
+async function saveAi() {
+  const model = ai.model === '__custom__' ? ai.customModel.trim() : ai.model
+  if (!model) { showToast('Model nomini kiriting', 'err'); return }
+  ai.saving = true
+  try {
+    const patch = { enabled: ai.enabled, greeting: ai.greeting, model, thinking: ai.thinking, ttsModel: ai.ttsModel, voice: ai.voice }
+    if (ai.apiKeyInput.trim()) patch.apiKey = ai.apiKeyInput.trim()
+    const r = await aiApi.saveSettings(patch)
+    ai.apiKeyInput = ''
+    ai.testResult = null
+    Object.assign(ai, { enabled: r.enabled, greeting: r.greeting, hasKey: r.hasKey, keyMasked: r.keyMasked, keyFromEnv: r.keyFromEnv,
+                        model: r.model, thinking: r.thinking, ttsModel: r.ttsModel, voice: r.voice })
+    reloadAiStatus()
+    showToast('AI sozlamalari saqlandi', 'ok')
+  } catch (e) {
+    showToast(e?.response?.data?.message || 'Saqlashda xatolik', 'err')
+  } finally { ai.saving = false }
+}
+
+async function testAi() {
+  ai.testing = true
+  ai.testResult = null
+  try {
+    const r = await aiApi.test(ai.ttsModel !== 'browser')
+    ai.testResult = r
+    if (r.audio?.data) new Audio(`data:${r.audio.mime || 'audio/wav'};base64,${r.audio.data}`).play().catch(() => {})
+  } catch (e) {
+    ai.testResult = { ok: false, error: e?.response?.data?.message || e.message }
+  } finally { ai.testing = false }
+}
+
+async function deleteKey() {
+  if (!confirm('Gemini API kaliti o\'chirilsinmi? AI yordamchi ishlamay qoladi.')) return
+  try {
+    const r = await aiApi.saveSettings({ apiKey: '__delete__' })
+    Object.assign(ai, { hasKey: r.hasKey, keyMasked: r.keyMasked, keyFromEnv: r.keyFromEnv })
+    reloadAiStatus()
+    showToast('Kalit o\'chirildi', 'ok')
+  } catch { showToast('Xatolik', 'err') }
+}
+
 onMounted(() => {
   loadSettings()
   loadBackupInfo()
   loadBotLinks()
+  if (isAdmin.value) loadAi()
 })
 
-const SECTIONS = [
+const BASE_SECTIONS = [
   { key: 'store',    label: 'Dokon ma\'lumotlari', icon: 'home'       },
   { key: 'receipt',  label: 'Chek sozlamalari',    icon: 'printer'    },
   { key: 'currency', label: 'Valyuta / Kurs',      icon: 'dollar-sign'},
   { key: 'system',   label: 'Tizim sozlamalari',   icon: 'settings'   },
 ]
-const activeSection = ref('store')
+// AI bo'limi faqat administratorga
+const SECTIONS = computed(() => isAdmin.value
+  ? [...BASE_SECTIONS, { key: 'ai', label: 'AI yordamchi', icon: 'sparkles' }]
+  : BASE_SECTIONS)
+// AI agent "Sozlamalarga o'tish" dan kelganda shu bo'lim ochiladi
+const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
 </script>
 
 <template>
@@ -312,6 +390,143 @@ const activeSection = ref('store')
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- AI yordamchi (Gemini) -->
+        <div v-if="activeSection === 'ai'" class="settings-section">
+          <h3 class="section-title">AI yordamchi (Gemini)</h3>
+          <p class="section-sub">
+            Pastdagi "Sellz AI" tugmasi: savdo, qarz, qoldiq haqida ovozli savol-javob.
+            Google Gemini bilan ishlaydi, kalit faqat serverda saqlanadi.
+          </p>
+
+          <div v-if="ai.loading" class="ai-note">Yuklanmoqda…</div>
+          <template v-else>
+            <div class="ai-status" :class="ai.hasKey ? 'ok' : 'warn'">
+              <AppIcon :name="ai.hasKey ? 'check-circle' : 'alert-circle'" :size="16"/>
+              <span v-if="ai.hasKey">
+                Ulangan — kalit: <code>{{ ai.keyMasked }}</code>
+                <span v-if="ai.keyFromEnv"> (serverdagi .env dan)</span>
+              </span>
+              <span v-else>
+                Kalit kiritilmagan.
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>
+                dan bepul kalit oling va pastga kiriting.
+              </span>
+            </div>
+
+            <div class="form-grid">
+              <div class="field field--full">
+                <label>Yoqish</label>
+                <div class="toggle-row">
+                  <button class="toggle-btn" :class="ai.enabled && 'toggle-btn--on'" @click="ai.enabled = !ai.enabled">
+                    <span class="toggle-knob"></span>
+                  </button>
+                  <span class="toggle-lbl">{{ ai.enabled ? 'AI yordamchi yoqilgan' : 'O\'chirilgan — tugma ko\'rinmaydi' }}</span>
+                </div>
+              </div>
+
+              <div class="field field--full">
+                <label>Gemini API kaliti</label>
+                <div class="ai-key">
+                  <input
+                    v-model="ai.apiKeyInput"
+                    :type="ai.showKey ? 'text' : 'password'"
+                    class="inp"
+                    :placeholder="ai.hasKey ? 'Yangi kalit kiritsangiz eskisi almashadi' : 'AIza…'"
+                    autocomplete="off"
+                  />
+                  <button class="ai-key__eye" type="button" @click="ai.showKey = !ai.showKey">
+                    <AppIcon :name="ai.showKey ? 'eye-off' : 'eye'" :size="15"/>
+                  </button>
+                </div>
+                <p class="field-hint">Kalit brauzerda saqlanmaydi — faqat serverdagi bazada.</p>
+              </div>
+
+              <div class="field">
+                <label>Model (suhbat)</label>
+                <select v-model="ai.model" class="inp">
+                  <option v-for="m in ai.models" :key="m.id" :value="m.id">{{ m.label }}</option>
+                  <option v-if="ai.model && ai.model !== '__custom__' && !ai.models.some(m => m.id === ai.model)" :value="ai.model">{{ ai.model }}</option>
+                  <option value="__custom__">Boshqa model…</option>
+                </select>
+                <input v-if="ai.model === '__custom__'" v-model="ai.customModel" class="inp" placeholder="masalan: gemini-4-neon" style="margin-top:6px"/>
+              </div>
+
+              <div class="field">
+                <label>Fikrlash darajasi</label>
+                <select v-model="ai.thinking" class="inp">
+                  <option v-for="t in ai.thinkingLevels" :key="t" :value="t">{{ t }}</option>
+                </select>
+                <p class="field-hint">low — tez va arzon (tavsiya)</p>
+              </div>
+
+              <div class="field">
+                <label>Ovoz (TTS) modeli</label>
+                <select v-model="ai.ttsModel" class="inp">
+                  <option v-for="m in ai.ttsModels" :key="m.id" :value="m.id">{{ m.label }}</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label>Ovoz tembri</label>
+                <select v-model="ai.voice" class="inp" :disabled="ai.ttsModel === 'browser'">
+                  <option v-for="v in ai.voices" :key="v" :value="v">{{ v }}</option>
+                </select>
+              </div>
+
+              <div class="field field--full">
+                <label>Ochilganda xulosa</label>
+                <div class="toggle-row">
+                  <button class="toggle-btn" :class="ai.greeting && 'toggle-btn--on'" @click="ai.greeting = !ai.greeting">
+                    <span class="toggle-knob"></span>
+                  </button>
+                  <span class="toggle-lbl">Tugma bosilganda bugungi savdo va qarzlar xulosasini ovoz bilan aytadi</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="ai-actions">
+              <button class="tbot__btn" :disabled="ai.saving" @click="saveAi">
+                <AppIcon name="save" :size="15"/> {{ ai.saving ? 'Saqlanmoqda…' : 'AI sozlamalarini saqlash' }}
+              </button>
+              <button class="ai-test" :disabled="ai.testing || !ai.hasKey" @click="testAi">
+                <AppIcon :name="ai.testing ? 'loader' : 'zap'" :size="15"/> {{ ai.testing ? 'Tekshirilmoqda…' : 'Sinab ko\'rish' }}
+              </button>
+              <button v-if="ai.hasKey && !ai.keyFromEnv" class="ai-del" @click="deleteKey">Kalitni o'chirish</button>
+            </div>
+            <div v-if="ai.testResult" class="ai-result" :class="ai.testResult.ok ? 'ok' : 'err'">
+              <template v-if="ai.testResult.ok">
+                ✓ {{ ai.testResult.model }} javob berdi ({{ ai.testResult.ms }} ms): «{{ ai.testResult.text }}»
+                <span v-if="ai.testResult.ttsError"><br>Ovoz xatosi: {{ ai.testResult.ttsError }}</span>
+              </template>
+              <template v-else>✗ {{ ai.testResult.error }}</template>
+            </div>
+
+            <div class="info-cards">
+              <div class="info-card">
+                <div class="info-card__ico info-card__ico--indigo"><AppIcon name="mic" :size="17"/></div>
+                <div>
+                  <p class="info-card__title">Ovozli savol</p>
+                  <p class="info-card__sub">Mikrofonni bosib o'zbekcha so'rang: "bugun qancha savdo bo'ldi?", "Azizbekning qarzi qancha?", "qarzdorlarni och".</p>
+                </div>
+              </div>
+              <div class="info-card">
+                <div class="info-card__ico info-card__ico--green"><AppIcon name="database" :size="17"/></div>
+                <div>
+                  <p class="info-card__title">Faqat o'qiydi</p>
+                  <p class="info-card__sub">AI sotuv, to'lov yoki tovarni o'zgartira olmaydi — ma'lumot beradi va sahifa ochadi. Har xodim o'z ruxsati doirasida ko'radi.</p>
+                </div>
+              </div>
+              <div class="info-card">
+                <div class="info-card__ico info-card__ico--blue"><AppIcon name="map-pin" :size="17"/></div>
+                <div>
+                  <p class="info-card__title">Filial bo'yicha</p>
+                  <p class="info-card__sub">Javoblar faqat joriy filial ma'lumotidan. Bosh ofis filialni almashtirib so'rashi mumkin.</p>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- Tizim sozlamalari -->
@@ -609,4 +824,24 @@ select.inp { cursor:pointer; }
 .rpe__uzs{font-size:13px;font-weight:600;color:#1e293b}
 .rpe__sep{color:#94a3b8;font-size:12px}
 .rpe__usd{font-size:14px;font-weight:800;color:#16a34a}
+
+/* ── AI yordamchi ─────────────────────────────────────── */
+.ai-note { font-size:13px; color:var(--color-text-3); padding:10px 0; }
+.ai-status { display:flex; align-items:center; gap:9px; padding:11px 14px; border-radius:12px; font-size:13px; margin-bottom:18px; line-height:1.45; }
+.ai-status.ok   { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+.ai-status.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+.ai-status code { font-family:ui-monospace, monospace; font-size:12px; background:rgba(255,255,255,.7); padding:1px 6px; border-radius:6px; }
+.ai-status a { color:#1d4ed8; font-weight:600; text-decoration:underline; }
+.ai-key { position:relative; display:flex; }
+.ai-key .inp { padding-right:42px; }
+.ai-key__eye { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--color-text-3); }
+.ai-key__eye:hover { background:var(--slate-100); color:var(--color-text); }
+.ai-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; align-items:center; }
+.ai-test { display:flex; align-items:center; gap:6px; padding:9px 16px; font-size:13px; font-weight:600; border-radius:8px; border:1.5px solid #c7d2fe; color:#4338ca; background:#eef2ff; font-family:inherit; }
+.ai-test:disabled { opacity:.55; cursor:not-allowed; }
+.ai-del { margin-left:auto; font-size:12.5px; font-weight:600; color:#be123c; padding:8px 10px; border-radius:8px; }
+.ai-del:hover { background:#fff1f2; }
+.ai-result { margin-top:12px; padding:11px 14px; border-radius:10px; font-size:12.5px; line-height:1.5; }
+.ai-result.ok  { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+.ai-result.err { background:#fff1f2; border:1px solid #fecdd3; color:#be123c; }
 </style>

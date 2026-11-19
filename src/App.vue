@@ -5,6 +5,7 @@ import Sidebar      from '@/components/Sidebar.vue'
 import Header       from '@/components/Header.vue'
 import BottomNav    from '@/components/BottomNav.vue'
 import GlobalSearch from '@/components/GlobalSearch.vue'
+import AiAgent      from '@/components/AiAgent.vue'
 import AppIcon      from '@/components/AppIcon.vue'
 import { useI18n } from '@/i18n/index.js'
 import { isLoggedIn, logout, refreshMe } from '@/composables/useAuth.js'
@@ -81,6 +82,9 @@ function handleLogout() {
 
     <!-- Global tezkor qidiruv (Ctrl/Cmd+K) -->
     <GlobalSearch />
+
+    <!-- Pastda qotib turuvchi ovozli AI yordamchi (Gemini) -->
+    <AiAgent />
   </div>
 
   <!-- Global toast (session expiry, etc.) -->
