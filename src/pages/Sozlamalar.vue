@@ -6,6 +6,7 @@ import { botApi } from '@/api/bot.js'
 import { showToast } from '@/composables/useToast.js'
 import { useRoute } from 'vue-router'
 import { aiApi } from '@/api/ai.js'
+import { API_URL } from '@/api/http.js'
 import { usePerms } from '@/composables/usePerms.js'
 import { loadStatus as reloadAiStatus } from '@/composables/useAiAgent.js'
 import { geminiInteract, extractText, geminiSynthesize } from '@/composables/geminiCore.js'
@@ -262,6 +263,53 @@ async function testAi() {
     }
     ai.testResult = { ok: false, error: msg }
   } finally { ai.testing = false }
+}
+
+// ── Tarmoq diagnostikasi ────────────────────────────────────────────
+// Brauzer qayerda, Google API'ga yetadimi, server yetadimi — xato sababini
+// aniqlash uchun. Google'ga soxta kalit bilan so'rov yuboriladi: tez "API key
+// not valid" kelsa tarmoq ochiq, vaqt tugasa — bu tarmoq Google'ni bloklaydi.
+const diag = reactive({ running: false, rows: [] })
+async function timed(label, fn, ms = 12000) {
+  const t0 = Date.now()
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  try {
+    const info = await fn(ctrl.signal)
+    diag.rows.push({ label, ok: true, ms: Date.now() - t0, info })
+  } catch (e) {
+    const msg = e?.name === 'AbortError' ? `vaqt tugadi (${ms / 1000}s)` : (e?.message || String(e))
+    diag.rows.push({ label, ok: false, ms: Date.now() - t0, info: msg })
+  } finally { clearTimeout(timer) }
+}
+async function runDiag() {
+  diag.running = true
+  diag.rows = []
+  await timed('Brauzer joylashuvi (ipinfo.io)', async signal => {
+    const r = await fetch('https://ipinfo.io/json', { signal })
+    const d = await r.json()
+    return `${d.country || '?'} ${d.city || ''} — ${d.org || ''} (IP ${d.ip || '?'})`
+  })
+  await timed('Do\'kon serveri (API)', async signal => {
+    const r = await fetch(`${API_URL}/ai/status`, { signal })
+    return `HTTP ${r.status} (401 bo\'lsa ham server ishlayapti)`
+  })
+  await timed('Google Gemini API (brauzerdan)', async signal => {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'diagnostika-soxta-kalit' },
+      body: JSON.stringify({ model: 'gemini-4-hydrogen', input: 'salom' }),
+    })
+    const t = await r.text()
+    if (/location is not supported/i.test(t)) return `HTTP ${r.status}: Google bu joylashuvdan ishlamaydi (User location is not supported)`
+    if (/API key not valid/i.test(t)) return `HTTP ${r.status}: Google'ga yetdi (soxta kalit rad etildi — kutilgan). Tarmoq OCHIQ`
+    return `HTTP ${r.status}: ${t.slice(0, 120)}`
+  })
+  await timed('Google (umumiy, www.gstatic.com)', async signal => {
+    const r = await fetch('https://www.gstatic.com/generate_204', { signal, mode: 'no-cors' })
+    return 'javob keldi'
+  }, 8000)
+  diag.running = false
 }
 
 async function deleteKey() {
@@ -611,6 +659,17 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
                 <AppIcon :name="ai.testing ? 'loader' : 'zap'" :size="15"/> {{ ai.testing ? 'Tekshirilmoqda…' : 'Sinab ko\'rish' }}
               </button>
               <button v-if="ai.hasKey && !ai.keyFromEnv" class="ai-del" @click="deleteKey">Kalitni o'chirish</button>
+            </div>
+            <div class="ai-diag">
+              <button class="ai-test" :disabled="diag.running" @click="runDiag">
+                <AppIcon :name="diag.running ? 'loader' : 'zap'" :size="15"/> {{ diag.running ? 'Tekshirilmoqda…' : 'Tarmoq diagnostikasi' }}
+              </button>
+              <span class="field-hint">Brauzer qayerda, Google va serverga yetadimi — xato sababini aniqlash uchun</span>
+              <ul v-if="diag.rows.length" class="ai-diag__list">
+                <li v-for="(r, i) in diag.rows" :key="i" :class="r.ok ? 'ok' : 'err'">
+                  <b>{{ r.ok ? '✓' : '✗' }} {{ r.label }}</b> <span class="ai-diag__ms">{{ r.ms }} ms</span><br>{{ r.info }}
+                </li>
+              </ul>
             </div>
             <div v-if="ai.testResult" class="ai-result" :class="ai.testResult.ok ? 'ok' : 'err'">
               <template v-if="ai.testResult.ok">
@@ -965,6 +1024,12 @@ select.inp { cursor:pointer; }
 .ai-test:disabled { opacity:.55; cursor:not-allowed; }
 .ai-del { margin-left:auto; font-size:12.5px; font-weight:600; color:#be123c; padding:8px 10px; border-radius:8px; }
 .ai-del:hover { background:#fff1f2; }
+.ai-diag { margin-top:14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.ai-diag__list { list-style:none; width:100%; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.ai-diag__list li { padding:9px 12px; border-radius:9px; font-size:12.5px; line-height:1.5; border:1px solid var(--color-border); background:var(--color-surface); word-break:break-word; }
+.ai-diag__list li.ok  { border-color:#bbf7d0; background:#f0fdf4; color:#166534; }
+.ai-diag__list li.err { border-color:#fecdd3; background:#fff1f2; color:#be123c; }
+.ai-diag__ms { font-size:11px; opacity:.7; margin-left:6px; }
 .ai-result { margin-top:12px; padding:11px 14px; border-radius:10px; font-size:12.5px; line-height:1.5; }
 .ai-result.ok  { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
 .ai-result.err { background:#fff1f2; border:1px solid #fecdd3; color:#be123c; }
