@@ -8,6 +8,7 @@ import { useRoute } from 'vue-router'
 import { aiApi } from '@/api/ai.js'
 import { usePerms } from '@/composables/usePerms.js'
 import { loadStatus as reloadAiStatus } from '@/composables/useAiAgent.js'
+import { geminiInteract, extractText, geminiSynthesize } from '@/composables/geminiCore.js'
 
 const STORAGE_KEY = 'pos_settings'
 
@@ -152,7 +153,15 @@ const ai = reactive({
   apiKeyInput: '', showKey: false, saving: false, testing: false, testResult: null,
   // Ulanish: relay (server joylashuvi Gemini uchun qo'llanmasa)
   endpoint: '', defaultEndpoint: '', isDirect: true, hasRelayToken: false, relayTokenMasked: '', relayTokenInput: '', useRelay: false,
+  // Rejim: auto | server | browser (effectiveMode — amalda qaysi biri)
+  mode: 'auto', effectiveMode: 'server', locationBlocked: false,
 })
+
+const MODES = [
+  { id: 'auto',    label: 'Avtomatik (tavsiya)', hint: "Server Gemini'ga yetsa — server; yetmasa (hudud cheklovi) — brauzer" },
+  { id: 'server',  label: 'Faqat server',        hint: 'Kalit faqat serverda. Server joylashuvi Gemini uchun qo\'llanishi yoki relay bo\'lishi shart' },
+  { id: 'browser', label: 'Faqat brauzer',       hint: "Gemini'ga kassirning brauzeri murojaat qiladi (O'zbekistondan ishlaydi)" },
+]
 
 async function loadAi() {
   ai.loading = true
@@ -164,6 +173,7 @@ async function loadAi() {
       models: r.models, ttsModels: r.ttsModels, voices: r.voices, thinkingLevels: r.thinkingLevels,
       endpoint: r.isDirect ? '' : r.endpoint, defaultEndpoint: r.defaultEndpoint, isDirect: r.isDirect,
       hasRelayToken: r.hasRelayToken, relayTokenMasked: r.relayTokenMasked, useRelay: !r.isDirect,
+      mode: r.mode, effectiveMode: r.effectiveMode, locationBlocked: r.locationBlocked,
     })
   } catch (e) {
     showToast(e?.response?.data?.message || 'AI sozlamalari yuklanmadi', 'err')
@@ -175,7 +185,7 @@ async function saveAi() {
   if (!model) { showToast('Model nomini kiriting', 'err'); return }
   ai.saving = true
   try {
-    const patch = { enabled: ai.enabled, greeting: ai.greeting, model, thinking: ai.thinking, ttsModel: ai.ttsModel, voice: ai.voice }
+    const patch = { enabled: ai.enabled, greeting: ai.greeting, model, thinking: ai.thinking, ttsModel: ai.ttsModel, voice: ai.voice, mode: ai.mode }
     if (ai.apiKeyInput.trim()) patch.apiKey = ai.apiKeyInput.trim()
     // Relay: yoqilgan bo'lsa manzil shart; o'chirilsa Google'ga to'g'ridan-to'g'ri
     if (ai.useRelay) {
@@ -192,7 +202,8 @@ async function saveAi() {
     Object.assign(ai, { enabled: r.enabled, greeting: r.greeting, hasKey: r.hasKey, keyMasked: r.keyMasked, keyFromEnv: r.keyFromEnv,
                         model: r.model, thinking: r.thinking, ttsModel: r.ttsModel, voice: r.voice,
                         endpoint: r.isDirect ? '' : r.endpoint, isDirect: r.isDirect, useRelay: !r.isDirect,
-                        hasRelayToken: r.hasRelayToken, relayTokenMasked: r.relayTokenMasked })
+                        hasRelayToken: r.hasRelayToken, relayTokenMasked: r.relayTokenMasked,
+                        mode: r.mode, effectiveMode: r.effectiveMode, locationBlocked: r.locationBlocked })
     reloadAiStatus()
     showToast('AI sozlamalari saqlandi', 'ok')
   } catch (e) {
@@ -200,15 +211,56 @@ async function saveAi() {
   } finally { ai.saving = false }
 }
 
+// Brauzer rejimida sinov: Gemini'ga shu brauzerdan murojaat
+async function testViaBrowser() {
+  const st = await aiApi.status()
+  const b = st.browser
+  if (!b?.apiKey) throw new Error('Brauzer rejimi uchun kalit olinmadi')
+  const t0 = Date.now()
+  const data = await geminiInteract({
+    model: b.model, store: false,
+    system_instruction: "Faqat o'zbek tilida, bitta qisqa gap bilan javob ber.",
+    input: 'Salom! Ishga tayyormisan? Bir gapda javob ber.',
+  }, { apiKey: b.apiKey, endpoint: b.endpoint, timeoutMs: 30000 })
+  const text = extractText(data?.steps) || "(bo'sh javob)"
+  const out = { ok: true, model: b.model, text, ms: Date.now() - t0, viaBrowser: true }
+  if (b.ttsModel && b.ttsModel !== 'browser') {
+    try {
+      const a = await geminiSynthesize(text, { apiKey: b.apiKey, endpoint: b.endpoint, model: b.ttsModel, voice: b.voice })
+      if (a?.data) new Audio(`data:${a.mime};base64,${a.data}`).play().catch(() => {})
+    } catch (e) { out.ttsError = e.message }
+  }
+  return out
+}
+
 async function testAi() {
   ai.testing = true
   ai.testResult = null
   try {
-    const r = await aiApi.test(ai.ttsModel !== 'browser')
+    let r
+    if (ai.effectiveMode === 'browser') {
+      r = await testViaBrowser()
+    } else {
+      r = await aiApi.test(ai.ttsModel !== 'browser')
+      if (r.browserMode) r = await testViaBrowser()
+      else if (r.audio?.data) new Audio(`data:${r.audio.mime || 'audio/wav'};base64,${r.audio.data}`).play().catch(() => {})
+    }
     ai.testResult = r
-    if (r.audio?.data) new Audio(`data:${r.audio.mime || 'audio/wav'};base64,${r.audio.data}`).play().catch(() => {})
+    await loadAi()
+    reloadAiStatus()
   } catch (e) {
-    ai.testResult = { ok: false, error: e?.response?.data?.message || e.message }
+    const msg = e?.response?.data?.message || e.message
+    // Server joylashuvi cheklangan → 'auto' rejim brauzerga o'tdi, qayta brauzerdan sinaymiz
+    if (/joylashuvida ishlamaydi/.test(msg) && ai.mode === 'auto') {
+      try {
+        await loadAi()
+        const r = await testViaBrowser()
+        ai.testResult = { ...r, switched: true }
+        reloadAiStatus()
+        return
+      } catch (e2) { ai.testResult = { ok: false, error: `${msg}\nBrauzerdan ham: ${e2.message}` }; return }
+    }
+    ai.testResult = { ok: false, error: msg }
   } finally { ai.testing = false }
 }
 
@@ -422,6 +474,8 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
               <span v-if="ai.hasKey">
                 Ulangan — kalit: <code>{{ ai.keyMasked }}</code>
                 <span v-if="ai.keyFromEnv"> (serverdagi .env dan)</span>
+                · rejim: <b>{{ ai.effectiveMode === 'browser' ? 'brauzer orqali' : 'server orqali' }}</b>
+                <span v-if="ai.effectiveMode === 'browser' && ai.mode === 'auto'"> (server joylashuvi Gemini uchun cheklangan, avtomatik o'tildi)</span>
               </span>
               <span v-else>
                 Kalit kiritilmagan.
@@ -519,6 +573,19 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
                   <span class="toggle-lbl">{{ ai.useRelay ? 'Relay orqali' : "To'g'ridan-to'g'ri Google" }}</span>
                 </div>
               </div>
+              <div class="form-grid" style="margin-bottom:10px">
+                <div class="field field--full">
+                  <label>Rejim</label>
+                  <select v-model="ai.mode" class="inp">
+                    <option v-for="m in MODES" :key="m.id" :value="m.id">{{ m.label }}</option>
+                  </select>
+                  <p class="field-hint">{{ MODES.find(m => m.id === ai.mode)?.hint }}</p>
+                  <p v-if="ai.mode !== 'server'" class="field-hint">
+                    Brauzer rejimida Gemini kaliti dasturga kirgan xodimlar brauzeriga yuboriladi. Google Cloud'da kalitni
+                    faqat shu dastur manziliga (HTTP referrer) cheklash tavsiya etiladi.
+                  </p>
+                </div>
+              </div>
               <div v-if="ai.useRelay" class="form-grid">
                 <div class="field field--full">
                   <label>Relay manzili</label>
@@ -547,7 +614,8 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
             </div>
             <div v-if="ai.testResult" class="ai-result" :class="ai.testResult.ok ? 'ok' : 'err'">
               <template v-if="ai.testResult.ok">
-                ✓ {{ ai.testResult.model }} javob berdi ({{ ai.testResult.ms }} ms): «{{ ai.testResult.text }}»
+                ✓ {{ ai.testResult.model }} javob berdi ({{ ai.testResult.ms }} ms{{ ai.testResult.viaBrowser ? ', brauzer orqali' : '' }}): «{{ ai.testResult.text }}»
+                <span v-if="ai.testResult.switched"><br>Server joylashuvi Gemini uchun cheklangan — brauzer rejimiga avtomatik o'tildi.</span>
                 <span v-if="ai.testResult.ttsError"><br>Ovoz xatosi: {{ ai.testResult.ttsError }}</span>
               </template>
               <template v-else>✗ {{ ai.testResult.error }}</template>

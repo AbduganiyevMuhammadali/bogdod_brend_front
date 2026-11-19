@@ -10,7 +10,7 @@ import { useAuth } from '@/composables/useAuth.js'
 
 const {
   open, status, messages, busy, recording, recSec, speaking, voiceOn, lastError,
-  configured, canConfigure, micSupported,
+  configured, canConfigure, micSupported, browserMode,
   loadStatus, openAgent, closeAgent, toggleAgent, send, clearChat,
   toggleVoice, stopSpeaking, startRecording, stopRecording, cancelRecording,
 } = useAiAgent()
@@ -38,7 +38,7 @@ const statusLine = computed(() => {
   if (busy.value)      return "O'ylamoqda…"
   if (speaking.value)  return 'Gapirmoqda…'
   const m = status.value?.model ? status.value.model.replace('gemini-', 'Gemini ') : 'Gemini'
-  return `${m} • ${branch.value?.name || ''}`
+  return `${m}${browserMode.value ? ' (brauzer)' : ''} • ${branch.value?.name || ''}`
 })
 
 const QUICK = [

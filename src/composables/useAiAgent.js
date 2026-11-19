@@ -9,6 +9,7 @@ import { ref, computed } from 'vue'
 import router from '@/router/index.js'
 import { aiApi } from '@/api/ai.js'
 import { isLoggedIn } from '@/composables/useAuth.js'
+import { geminiChat, geminiSynthesize } from '@/composables/geminiCore.js'
 
 const VOICE_KEY = 'ai_voice'          // '1' | '0' — ovozli javob
 const MAX_REC_SEC = 30
@@ -36,6 +37,22 @@ export const configured = computed(() => !!status.value?.configured && status.va
 export const canConfigure = computed(() => !!status.value?.canConfigure)
 // Gemini TTS ishlatiladimi (aks holda brauzer ovozi)
 const geminiTts = computed(() => !!status.value?.ttsModel && status.value.ttsModel !== 'browser')
+// Brauzer rejimi: Gemini'ga brauzer o'zi murojaat qiladi (server joylashuvi cheklangan)
+export const browserMode = computed(() => status.value?.mode === 'browser' && !!status.value?.browser?.apiKey)
+
+// Brauzerdan Gemini TTS
+async function synthBrowser(text) {
+  const b = status.value?.browser
+  if (!b?.apiKey || !b.ttsModel || b.ttsModel === 'browser') return null
+  try { return await geminiSynthesize(text, { apiKey: b.apiKey, endpoint: b.endpoint, model: b.ttsModel, voice: b.voice }) }
+  catch (e) { console.warn('[AI] TTS (brauzer):', e.message); return null }
+}
+async function speakOut(text, serverAudio) {
+  if (!voiceOn.value) return
+  if (serverAudio?.data) return playAudio(serverAudio)
+  const a = browserMode.value ? await synthBrowser(text) : null
+  a ? playAudio(a) : speakBrowser(text)
+}
 
 export async function loadStatus() {
   if (!isLoggedIn.value) return
@@ -85,9 +102,11 @@ export async function greet() {
   greeted = true
   const m = push({ role: 'assistant', text: '', pending: true })
   try {
-    const r = await aiApi.greeting(voiceOn.value && geminiTts.value)
+    const r = await aiApi.greeting(voiceOn.value && geminiTts.value && !browserMode.value)
     patch(m, { text: r.text, pending: false })
-    if (voiceOn.value) r.audio ? playAudio(r.audio) : speakBrowser(r.text)
+    // Server ovoz bera olmadi (masalan joylashuv) → holatni yangilab brauzerdan
+    if (r.ttsError && /joylashuv|location/i.test(r.ttsError)) await loadStatus()
+    await speakOut(r.text, r.audio)
   } catch (e) {
     patch(m, { text: 'Salom! Nima bilan yordam beray?', pending: false })
   }
@@ -113,10 +132,28 @@ async function ask(payload, userMsg = null) {
   lastError.value = ''
   const m = push({ role: 'assistant', text: '', pending: true })
   try {
-    const r = await aiApi.chat({ ...payload, history: history().slice(0, -1), speak: voiceOn.value && geminiTts.value })
+    const hist = history().slice(0, -1)
+    let r
+    if (browserMode.value) {
+      r = await chatViaBrowser(payload, hist)
+    } else {
+      try {
+        r = await aiApi.chat({ ...payload, history: hist, speak: voiceOn.value && geminiTts.value })
+      } catch (e) {
+        // Server Gemini'ga yetolmadi (joylashuv) yoki brauzer rejimiga o'tgan → brauzerdan
+        // error.middleware `data` ni javobga yoyadi: { type, status, message, code }
+        const msg = e?.response?.data?.message || ''
+        const code = e?.response?.data?.code
+        if (code === 'BROWSER_MODE' || e?.response?.status === 409 || /joylashuvida ishlamaydi/.test(msg)) {
+          await loadStatus()
+          if (!browserMode.value) throw e
+          r = await chatViaBrowser(payload, hist)
+        } else throw e
+      }
+    }
     if (userMsg && r.transcript) patch(userMsg, { text: r.transcript, transcript: r.transcript })
     patch(m, { text: r.text, pending: false, tools: r.tools || [], actions: r.actions || [], ms: r.ms })
-    if (voiceOn.value) r.audio ? playAudio(r.audio) : speakBrowser(r.text)
+    await speakOut(r.text, r.audio)
     // Sahifa ochish so'ralgan bo'lsa — o'tamiz va panelni yig'amiz (sahifa ko'rinsin;
     // ovoz ijrosi davom etadi)
     const nav = (r.actions || []).find(a => a.type === 'navigate' && a.path)
@@ -128,6 +165,19 @@ async function ask(payload, userMsg = null) {
   } finally {
     busy.value = false
   }
+}
+
+// Brauzer rejimi: ko'rsatma+vositalar serverdan, Gemini'ga brauzer, vositalar serverda
+async function chatViaBrowser(payload, hist) {
+  const b = status.value.browser
+  const ctx = await aiApi.context()
+  const t0 = Date.now()
+  const r = await geminiChat(
+    { apiKey: b.apiKey, endpoint: b.endpoint, model: b.model, thinking: b.thinking, systemInstruction: ctx.systemInstruction, tools: ctx.tools },
+    { text: payload.text, audio: payload.audio, history: hist },
+    (name, args) => aiApi.runTool(name, args),
+  )
+  return { ...r, ms: Date.now() - t0 }
 }
 
 // ── Ovoz ijrosi ───────────────────────────────────────────────────────────
@@ -268,7 +318,7 @@ async function blobToBase64(blob) { return bufToBase64(await blob.arrayBuffer())
 export function useAiAgent() {
   return {
     open, status, messages, busy, recording, recSec, speaking, voiceOn, lastError,
-    configured, canConfigure, micSupported,
+    configured, canConfigure, micSupported, browserMode,
     loadStatus, openAgent, closeAgent, toggleAgent, send, greet, clearChat,
     toggleVoice, stopSpeaking, startRecording, stopRecording, cancelRecording,
   }

@@ -28,6 +28,16 @@ export const aiApi = {
     return http.post('/ai/speak', { text }, { timeout: 60000 }).then(r => r.data)
   },
 
+  // ── Brauzer rejimi: Gemini'ga brauzer murojaat qiladi ──
+  /** Tizim ko'rsatmasi va ruxsat etilgan vositalar (har savol oldidan) */
+  context() {
+    return http.get('/ai/context').then(r => r.data)
+  },
+  /** Gemini so'ragan vositani serverda bajarish → { result, actions } */
+  runTool(name, args) {
+    return http.post('/ai/tools/run', { name, args }, { timeout: 30000 }).then(r => r.data)
+  },
+
   // ── Sozlamalar (faqat admin) ──
   getSettings() {
     return http.get('/ai/settings').then(r => r.data)
