@@ -150,6 +150,8 @@ const ai = reactive({
   model: '', customModel: '', thinking: 'low', ttsModel: '', voice: 'Kore',
   models: [], ttsModels: [], voices: [], thinkingLevels: [],
   apiKeyInput: '', showKey: false, saving: false, testing: false, testResult: null,
+  // Ulanish: relay (server joylashuvi Gemini uchun qo'llanmasa)
+  endpoint: '', defaultEndpoint: '', isDirect: true, hasRelayToken: false, relayTokenMasked: '', relayTokenInput: '', useRelay: false,
 })
 
 async function loadAi() {
@@ -160,6 +162,8 @@ async function loadAi() {
       enabled: r.enabled, greeting: r.greeting, hasKey: r.hasKey, keyMasked: r.keyMasked, keyFromEnv: r.keyFromEnv,
       model: r.model, thinking: r.thinking, ttsModel: r.ttsModel, voice: r.voice,
       models: r.models, ttsModels: r.ttsModels, voices: r.voices, thinkingLevels: r.thinkingLevels,
+      endpoint: r.isDirect ? '' : r.endpoint, defaultEndpoint: r.defaultEndpoint, isDirect: r.isDirect,
+      hasRelayToken: r.hasRelayToken, relayTokenMasked: r.relayTokenMasked, useRelay: !r.isDirect,
     })
   } catch (e) {
     showToast(e?.response?.data?.message || 'AI sozlamalari yuklanmadi', 'err')
@@ -173,11 +177,22 @@ async function saveAi() {
   try {
     const patch = { enabled: ai.enabled, greeting: ai.greeting, model, thinking: ai.thinking, ttsModel: ai.ttsModel, voice: ai.voice }
     if (ai.apiKeyInput.trim()) patch.apiKey = ai.apiKeyInput.trim()
+    // Relay: yoqilgan bo'lsa manzil shart; o'chirilsa Google'ga to'g'ridan-to'g'ri
+    if (ai.useRelay) {
+      if (!ai.endpoint.trim()) { showToast('Relay manzilini kiriting', 'err'); ai.saving = false; return }
+      patch.endpoint = ai.endpoint.trim()
+      if (ai.relayTokenInput.trim()) patch.relayToken = ai.relayTokenInput.trim()
+    } else {
+      patch.endpoint = ''
+    }
     const r = await aiApi.saveSettings(patch)
     ai.apiKeyInput = ''
+    ai.relayTokenInput = ''
     ai.testResult = null
     Object.assign(ai, { enabled: r.enabled, greeting: r.greeting, hasKey: r.hasKey, keyMasked: r.keyMasked, keyFromEnv: r.keyFromEnv,
-                        model: r.model, thinking: r.thinking, ttsModel: r.ttsModel, voice: r.voice })
+                        model: r.model, thinking: r.thinking, ttsModel: r.ttsModel, voice: r.voice,
+                        endpoint: r.isDirect ? '' : r.endpoint, isDirect: r.isDirect, useRelay: !r.isDirect,
+                        hasRelayToken: r.hasRelayToken, relayTokenMasked: r.relayTokenMasked })
     reloadAiStatus()
     showToast('AI sozlamalari saqlandi', 'ok')
   } catch (e) {
@@ -482,6 +497,41 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
                     <span class="toggle-knob"></span>
                   </button>
                   <span class="toggle-lbl">Tugma bosilganda bugungi savdo va qarzlar xulosasini ovoz bilan aytadi</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ulanish: relay -->
+            <div class="ai-relay">
+              <div class="ai-relay__hd">
+                <div>
+                  <p class="ai-relay__t">Ulanish</p>
+                  <p class="ai-relay__s">
+                    Gemini ba'zi hududlarda (masalan Rossiyadagi serverlar) ishlamaydi —
+                    "User location is not supported". Bunda so'rovlar ruxsat etilgan hududdagi
+                    <b>relay</b> orqali yuboriladi.
+                  </p>
+                </div>
+                <div class="toggle-row">
+                  <button class="toggle-btn" :class="ai.useRelay && 'toggle-btn--on'" @click="ai.useRelay = !ai.useRelay">
+                    <span class="toggle-knob"></span>
+                  </button>
+                  <span class="toggle-lbl">{{ ai.useRelay ? 'Relay orqali' : "To'g'ridan-to'g'ri Google" }}</span>
+                </div>
+              </div>
+              <div v-if="ai.useRelay" class="form-grid">
+                <div class="field field--full">
+                  <label>Relay manzili</label>
+                  <input v-model="ai.endpoint" class="inp" placeholder="http://RELAY_IP:3977/v1beta/interactions"/>
+                  <p class="field-hint">
+                    Relay — <code>beckend/tools/gemini-relay.js</code> (o'z serveringizda, masalan Toshkentdagi VPS) yoki
+                    <code>gemini-relay.worker.js</code> (Cloudflare Workers, bepul).
+                  </p>
+                </div>
+                <div class="field field--full">
+                  <label>Relay token</label>
+                  <input v-model="ai.relayTokenInput" class="inp" type="password" autocomplete="off"
+                         :placeholder="ai.hasRelayToken ? `Saqlangan: ${ai.relayTokenMasked} (yangisini kiritsangiz almashadi)` : 'Relay ishga tushirilgan RELAY_TOKEN'"/>
                 </div>
               </div>
             </div>
@@ -826,6 +876,12 @@ select.inp { cursor:pointer; }
 .rpe__usd{font-size:14px;font-weight:800;color:#16a34a}
 
 /* ── AI yordamchi ─────────────────────────────────────── */
+.ai-relay { margin-top:18px; padding:14px 16px; border:1.5px dashed var(--color-border); border-radius:14px; background:var(--slate-50); }
+.ai-relay__hd { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+.ai-relay__t { font-size:13.5px; font-weight:800; color:var(--color-text); }
+.ai-relay__s { font-size:12px; color:var(--color-text-2); line-height:1.5; max-width:420px; margin-top:3px; }
+.ai-relay .form-grid { margin-top:4px; }
+.ai-relay code { font-family:ui-monospace, monospace; font-size:11px; background:#fff; padding:1px 5px; border-radius:5px; border:1px solid var(--color-border); }
 .ai-note { font-size:13px; color:var(--color-text-3); padding:10px 0; }
 .ai-status { display:flex; align-items:center; gap:9px; padding:11px 14px; border-radius:12px; font-size:13px; margin-bottom:18px; line-height:1.45; }
 .ai-status.ok   { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
