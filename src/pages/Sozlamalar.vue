@@ -156,7 +156,22 @@ const ai = reactive({
   endpoint: '', defaultEndpoint: '', isDirect: true, hasRelayToken: false, relayTokenMasked: '', relayTokenInput: '', useRelay: false,
   // Rejim: auto | server | browser (effectiveMode — amalda qaysi biri)
   mode: 'auto', effectiveMode: 'server', locationBlocked: false,
+  // Provayder: gemini | openai (Mistral, DeepSeek, boshqa OpenAI-mos)
+  provider: 'gemini',
+  oa: { baseUrl: '', preset: 'mistral', hasKey: false, keyMasked: '', model: '', audioModel: '', ttsModel: '', ttsVoice: '', presets: {} },
+  oaKeyInput: '', oaShowKey: false, oaPreset: 'mistral',
 })
+
+const PROVIDERS = [
+  { id: 'openai', label: "Mistral / DeepSeek / boshqa (OpenAI-mos) — Rossiyadagi serverdan ishlaydi" },
+  { id: 'gemini', label: 'Google Gemini — server yoki brauzer O\'zbekiston/Yevropada bo\'lsa' },
+]
+function applyOaPreset(id) {
+  ai.oaPreset = id
+  const p = ai.oa.presets?.[id]
+  if (!p) return
+  ai.oa.baseUrl = p.baseUrl; ai.oa.model = p.model; ai.oa.audioModel = p.audioModel; ai.oa.ttsModel = p.ttsModel; ai.oa.ttsVoice = p.ttsVoice
+}
 
 const MODES = [
   { id: 'auto',    label: 'Avtomatik (tavsiya)', hint: "Server Gemini'ga yetsa — server; yetmasa (hudud cheklovi) — brauzer" },
@@ -175,6 +190,7 @@ async function loadAi() {
       endpoint: r.isDirect ? '' : r.endpoint, defaultEndpoint: r.defaultEndpoint, isDirect: r.isDirect,
       hasRelayToken: r.hasRelayToken, relayTokenMasked: r.relayTokenMasked, useRelay: !r.isDirect,
       mode: r.mode, effectiveMode: r.effectiveMode, locationBlocked: r.locationBlocked,
+      provider: r.provider || 'gemini', oa: { ...ai.oa, ...(r.oa || {}) }, oaPreset: r.oa?.preset || 'mistral',
     })
   } catch (e) {
     showToast(e?.response?.data?.message || 'AI sozlamalari yuklanmadi', 'err')
@@ -186,8 +202,15 @@ async function saveAi() {
   if (!model) { showToast('Model nomini kiriting', 'err'); return }
   ai.saving = true
   try {
-    const patch = { enabled: ai.enabled, greeting: ai.greeting, model, thinking: ai.thinking, ttsModel: ai.ttsModel, voice: ai.voice, mode: ai.mode }
+    const patch = { enabled: ai.enabled, greeting: ai.greeting, model, thinking: ai.thinking, ttsModel: ai.ttsModel, voice: ai.voice, mode: ai.mode,
+                    provider: ai.provider }
     if (ai.apiKeyInput.trim()) patch.apiKey = ai.apiKeyInput.trim()
+    if (ai.provider === 'openai') {
+      if (!ai.oa.baseUrl.trim() || !ai.oa.model.trim()) { showToast('Provayder manzili va modelini kiriting', 'err'); ai.saving = false; return }
+      Object.assign(patch, { oaBaseUrl: ai.oa.baseUrl.trim(), oaModel: ai.oa.model.trim(), oaAudioModel: ai.oa.audioModel.trim(),
+                             oaTtsModel: ai.oa.ttsModel.trim(), oaTtsVoice: ai.oa.ttsVoice.trim() })
+      if (ai.oaKeyInput.trim()) patch.oaApiKey = ai.oaKeyInput.trim()
+    }
     // Relay: yoqilgan bo'lsa manzil shart; o'chirilsa Google'ga to'g'ridan-to'g'ri
     if (ai.useRelay) {
       if (!ai.endpoint.trim()) { showToast('Relay manzilini kiriting', 'err'); ai.saving = false; return }
@@ -198,8 +221,10 @@ async function saveAi() {
     }
     const r = await aiApi.saveSettings(patch)
     ai.apiKeyInput = ''
+    ai.oaKeyInput = ''
     ai.relayTokenInput = ''
     ai.testResult = null
+    Object.assign(ai, { provider: r.provider || 'gemini', oa: { ...ai.oa, ...(r.oa || {}) }, oaPreset: r.oa?.preset || ai.oaPreset })
     Object.assign(ai, { enabled: r.enabled, greeting: r.greeting, hasKey: r.hasKey, keyMasked: r.keyMasked, keyFromEnv: r.keyFromEnv,
                         model: r.model, thinking: r.thinking, ttsModel: r.ttsModel, voice: r.voice,
                         endpoint: r.isDirect ? '' : r.endpoint, isDirect: r.isDirect, useRelay: !r.isDirect,
@@ -239,7 +264,10 @@ async function testAi() {
   ai.testResult = null
   try {
     let r
-    if (ai.effectiveMode === 'browser') {
+    if (ai.provider !== 'gemini') {
+      r = await aiApi.test(!!ai.oa.ttsModel)
+      if (r.audio?.data) new Audio(`data:${r.audio.mime || 'audio/mpeg'};base64,${r.audio.data}`).play().catch(() => {})
+    } else if (ai.effectiveMode === 'browser') {
       r = await testViaBrowser()
     } else {
       r = await aiApi.test(ai.ttsModel !== 'browser')
@@ -517,7 +545,72 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
 
           <div v-if="ai.loading" class="ai-note">Yuklanmoqda…</div>
           <template v-else>
-            <div class="ai-status" :class="ai.hasKey ? 'ok' : 'warn'">
+            <!-- Provayder tanlash -->
+            <div class="form-grid" style="margin-bottom:14px">
+              <div class="field field--full">
+                <label>AI provayderi</label>
+                <select v-model="ai.provider" class="inp">
+                  <option v-for="p in PROVIDERS" :key="p.id" :value="p.id">{{ p.label }}</option>
+                </select>
+                <p class="field-hint">
+                  Do'kon serveri Rossiyada bo'lgani uchun Google/OpenAI u yerdan bloklangan; <b>Mistral</b> (bepul tarif, ovozli xabar va TTS bor)
+                  yoki <b>DeepSeek</b> ishlaydi.
+                </p>
+              </div>
+            </div>
+
+            <!-- OpenAI-mos provayder (Mistral / DeepSeek) -->
+            <template v-if="ai.provider === 'openai'">
+              <div class="ai-status" :class="ai.oa.hasKey ? 'ok' : 'warn'">
+                <AppIcon :name="ai.oa.hasKey ? 'check-circle' : 'alert-circle'" :size="16"/>
+                <span v-if="ai.oa.hasKey">Ulangan — {{ ai.oa.baseUrl }}, kalit: <code>{{ ai.oa.keyMasked }}</code>, model <b>{{ ai.oa.model }}</b></span>
+                <span v-else>
+                  Kalit kiritilmagan.
+                  <a v-if="ai.oa.presets?.[ai.oaPreset]?.keyUrl" :href="ai.oa.presets[ai.oaPreset].keyUrl" target="_blank" rel="noopener">{{ ai.oa.presets[ai.oaPreset].keyUrl.replace('https://','') }}</a>
+                  dan kalit oling va pastga kiriting.
+                </span>
+              </div>
+              <div class="form-grid">
+                <div class="field field--full">
+                  <label>Provayder</label>
+                  <div class="ai-presets">
+                    <button v-for="(p, id) in ai.oa.presets" :key="id" class="ai-preset" :class="{ on: ai.oaPreset === id }" @click="applyOaPreset(id)">{{ p.label }}</button>
+                    <button class="ai-preset" :class="{ on: ai.oaPreset === 'custom' }" @click="ai.oaPreset = 'custom'">Boshqa (OpenAI-mos manzil)</button>
+                  </div>
+                </div>
+                <div class="field field--full">
+                  <label>API kaliti</label>
+                  <div class="ai-key">
+                    <input v-model="ai.oaKeyInput" :type="ai.oaShowKey ? 'text' : 'password'" class="inp" autocomplete="off"
+                           :placeholder="ai.oa.hasKey ? 'Yangi kalit kiritsangiz eskisi almashadi' : 'Provayder API kaliti'"/>
+                    <button class="ai-key__eye" type="button" @click="ai.oaShowKey = !ai.oaShowKey"><AppIcon :name="ai.oaShowKey ? 'eye-off' : 'eye'" :size="15"/></button>
+                  </div>
+                </div>
+                <div class="field field--full">
+                  <label>API manzili (base URL)</label>
+                  <input v-model="ai.oa.baseUrl" class="inp" placeholder="https://api.mistral.ai/v1"/>
+                </div>
+                <div class="field">
+                  <label>Model (suhbat)</label>
+                  <input v-model="ai.oa.model" class="inp" placeholder="mistral-small-latest"/>
+                  <p class="field-hint">Mistral: mistral-small-latest (tez) / mistral-large-latest (aqlliroq). DeepSeek: deepseek-chat</p>
+                </div>
+                <div class="field">
+                  <label>Ovozli xabar modeli</label>
+                  <input v-model="ai.oa.audioModel" class="inp" placeholder="voxtral-small-latest (bo'sh = ovozli xabar yo'q)"/>
+                </div>
+                <div class="field">
+                  <label>TTS (ovoz) modeli</label>
+                  <input v-model="ai.oa.ttsModel" class="inp" placeholder="voxtral-mini-tts-3-0 (bo'sh = brauzer ovozi)"/>
+                </div>
+                <div class="field">
+                  <label>TTS ovoz nomi (ixtiyoriy)</label>
+                  <input v-model="ai.oa.ttsVoice" class="inp" placeholder="standart"/>
+                </div>
+              </div>
+            </template>
+
+            <div v-if="ai.provider === 'gemini'" class="ai-status" :class="ai.hasKey ? 'ok' : 'warn'">
               <AppIcon :name="ai.hasKey ? 'check-circle' : 'alert-circle'" :size="16"/>
               <span v-if="ai.hasKey">
                 Ulangan — kalit: <code>{{ ai.keyMasked }}</code>
@@ -543,6 +636,7 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
                 </div>
               </div>
 
+              <template v-if="ai.provider === 'gemini'">
               <div class="field field--full">
                 <label>Gemini API kaliti</label>
                 <div class="ai-key">
@@ -592,6 +686,7 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
                 </select>
               </div>
 
+              </template>
               <div class="field field--full">
                 <label>Ochilganda xulosa</label>
                 <div class="toggle-row">
@@ -603,8 +698,8 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
               </div>
             </div>
 
-            <!-- Ulanish: relay -->
-            <div class="ai-relay">
+            <!-- Ulanish: relay (faqat Gemini uchun) -->
+            <div v-if="ai.provider === 'gemini'" class="ai-relay">
               <div class="ai-relay__hd">
                 <div>
                   <p class="ai-relay__t">Ulanish</p>
@@ -655,7 +750,7 @@ const activeSection = ref(route.query.section === 'ai' ? 'ai' : 'store')
               <button class="tbot__btn" :disabled="ai.saving" @click="saveAi">
                 <AppIcon name="save" :size="15"/> {{ ai.saving ? 'Saqlanmoqda…' : 'AI sozlamalarini saqlash' }}
               </button>
-              <button class="ai-test" :disabled="ai.testing || !ai.hasKey" @click="testAi">
+              <button class="ai-test" :disabled="ai.testing || !(ai.provider === 'openai' ? ai.oa.hasKey : ai.hasKey)" @click="testAi">
                 <AppIcon :name="ai.testing ? 'loader' : 'zap'" :size="15"/> {{ ai.testing ? 'Tekshirilmoqda…' : 'Sinab ko\'rish' }}
               </button>
               <button v-if="ai.hasKey && !ai.keyFromEnv" class="ai-del" @click="deleteKey">Kalitni o'chirish</button>
@@ -1024,6 +1119,9 @@ select.inp { cursor:pointer; }
 .ai-test:disabled { opacity:.55; cursor:not-allowed; }
 .ai-del { margin-left:auto; font-size:12.5px; font-weight:600; color:#be123c; padding:8px 10px; border-radius:8px; }
 .ai-del:hover { background:#fff1f2; }
+.ai-presets { display:flex; flex-wrap:wrap; gap:8px; }
+.ai-preset { padding:8px 12px; border-radius:10px; border:1.5px solid var(--color-border); background:var(--color-surface); font-size:12.5px; font-weight:600; color:var(--color-text-2); text-align:left; }
+.ai-preset.on { border-color:#7c3aed; background:#f5f3ff; color:#5b21b6; }
 .ai-diag { margin-top:14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
 .ai-diag__list { list-style:none; width:100%; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; }
 .ai-diag__list li { padding:9px 12px; border-radius:9px; font-size:12.5px; line-height:1.5; border:1px solid var(--color-border); background:var(--color-surface); word-break:break-word; }
