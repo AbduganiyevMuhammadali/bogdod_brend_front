@@ -17,7 +17,7 @@ import { purchasesApi } from '@/api/purchases.js'
 import { genBarcode, printLabels58x40, getLabelSize, setLabelSize } from '@/composables/useBarcodePrint.js'
 import { showToast } from '@/composables/useToast.js'
 import { fmtDate, fmtTime } from '@/composables/useDateTime.js'
-import { getRecent, rememberValues } from '@/composables/useRecentValues.js'
+import { getRecent, rememberValue, rememberValues, forgetValue } from '@/composables/useRecentValues.js'
 
 // Ro'yxatlar mahsulot formasi bilan bir xil bo'lishi uchun bitta manbadan
 import {
@@ -49,6 +49,7 @@ function blankRow() {
     nameOverride: '',        // bo'sh bo'lsa avtomatik nom ishlatiladi
     sizes: [],               // [{ size, qty, barcode }]
     _open: false,            // qo'shimcha maydonlar ochiqmi
+    _newSize: '',            // "razmer qo'shish" maydoni
   }
 }
 
@@ -151,6 +152,29 @@ function addSizeSet(r, list) {
   list.forEach(s => { if (!r.sizes.some(x => x.size === s)) r.sizes.push({ size: s, qty: 1, barcode: genBarcode() }) })
 }
 function clearSizes(r) { r.sizes = [] }
+
+// O'z razmeri: tayyor chiplarda yo'q bo'lsa, foydalanuvchi yozib qo'shadi.
+// Shu kompyuterda eslab qolinadi va keyingi safar chiplar qatorida turadi.
+const customSizes = ref(getRecent('size').filter(v => !allSizeChips.some(c => c.toLowerCase() === String(v).toLowerCase())))
+const sizeChips = computed(() => [...allSizeChips, ...customSizes.value])
+
+function addCustomSize(r) {
+  // Vergul bilan bir nechtasini birdan yozish mumkin: "110, 116, 122"
+  const list = String(r._newSize || '').split(/[,;]+/).map(v => v.trim().replace(/\s+/g, ' ').slice(0, 20)).filter(Boolean)
+  for (const raw of list) {
+    // Bor razmer boshqa registrda yozilgan bo'lsa (xl -> XL) o'shani olamiz
+    const bor = sizeChips.value.find(c => c.toLowerCase() === raw.toLowerCase())
+    const s = bor || raw.toUpperCase()
+    if (!bor) { customSizes.value.push(s); rememberValue('size', s) }
+    if (!r.sizes.some(x => x.size === s)) r.sizes.push({ size: s, qty: 1, barcode: genBarcode() })
+  }
+  r._newSize = ''
+}
+function removeCustomSize(s) {
+  customSizes.value = customSizes.value.filter(x => x !== s)
+  forgetValue('size', s)
+  rows.value.forEach(r => { r.sizes = r.sizes.filter(x => x.size !== s) })
+}
 function sizeQtyTotal(r) { return r.sizes.reduce((a, s) => a + (Number(s.qty) || 0), 0) }
 
 // ── Hisob-kitob ─────────────────────────────────────────────────────────
@@ -947,12 +971,22 @@ function docLabelCount(d) {
 
                     <div class="qi__chips">
                       <button
-                        v-for="s in allSizeChips"
+                        v-for="s in sizeChips"
                         :key="s"
                         class="qi__chip"
-                        :class="{ on: r.sizes.some(x => x.size === s) }"
+                        :class="{ on: r.sizes.some(x => x.size === s), 'qi__chip--own': customSizes.includes(s) }"
                         @click="toggleSize(r, s)"
-                      >{{ s }}</button>
+                      >{{ s }}<i v-if="customSizes.includes(s)" class="qi__chip-x" title="Ro'yxatdan o'chirish" @click.stop="removeCustomSize(s)">×</i></button>
+                      <span class="qi__chip-add">
+                        <input
+                          v-model="r._newSize"
+                          class="qi__chip-inp"
+                          maxlength="60"
+                          placeholder="Razmer qo'shish"
+                          @keydown.enter.prevent.stop="addCustomSize(r)"
+                        />
+                        <button type="button" class="qi__chip-plus" :disabled="!String(r._newSize || '').trim()" title="Qo'shish (Enter)" @click="addCustomSize(r)">+</button>
+                      </span>
                     </div>
 
                     <div v-if="r.sizes.length" class="qi__sz-rows">
@@ -1283,6 +1317,21 @@ function docLabelCount(d) {
 }
 .qi__chip:hover { border-color: #c4b5fd; }
 .qi__chip.on { background: #7c42eb; border-color: #7c42eb; color: #fff; font-weight: 600; }
+.qi__chip--own { border-style: dashed; }
+.qi__chip-x { margin-left: 5px; font-style: normal; opacity: .55; }
+.qi__chip-x:hover { opacity: 1; color: #dc2626; }
+.qi__chip.on .qi__chip-x:hover { color: #fff; }
+.qi__chip-add { display: inline-flex; }
+.qi__chip-inp {
+  width: 118px; padding: 3px 7px; border: 1px solid #c4b5fd; border-right: 0; border-radius: 5px 0 0 5px;
+  background: #fff; font-size: 11.5px; color: #334155; outline: none;
+}
+.qi__chip-inp:focus { border-color: #7c42eb; }
+.qi__chip-plus {
+  width: 26px; border: 1px solid #7c42eb; border-radius: 0 5px 5px 0;
+  background: #7c42eb; color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
+}
+.qi__chip-plus:disabled { opacity: .45; cursor: default; }
 
 .qi__sz-rows { display: flex; flex-wrap: wrap; gap: 6px; }
 .qi__sz-row {
